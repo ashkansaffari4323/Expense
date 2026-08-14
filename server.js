@@ -15,7 +15,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use(session({ secret: process.env.SESSION_SECRET || "dev-secret", resave: false, saveUninitialized: false, cookie: { httpOnly: true, sameSite: "lax" } }));
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
-app.get("/api/version", (req, res) => res.json({ ok: true, version: "v25", design: "3LO Cost, project ID as container ID, Region AUS, project company dropdown via 2LO account:read" }));
+app.get("/api/version", (req, res) => res.json({ ok: true, version: "v26", design: "3LO Cost, project ID as container ID, Region AUS, project company dropdown via 2LO account:read" }));
 app.get("/api/debug/last-cost-request", (req, res) => res.json({ ok: true, lastCostRequest: getLastCostRequest() }));
 app.get("/api/auth/login", (req, res) => { const state = crypto.randomBytes(16).toString("hex"); req.session.oauthState = state; res.redirect(buildAuthorizeUrl(state)); });
 app.get("/api/auth/callback", async (req, res) => { try { const { code, state, error, error_description } = req.query; if (error) return res.status(400).send(`Autodesk sign-in failed: ${error_description || error}`); if (!code || state !== req.session.oauthState) return res.status(400).send("Invalid OAuth callback"); const token = await exchangeCodeForToken(code); req.session.aps = { access_token: token.access_token, refresh_token: token.refresh_token, expires_at: Date.now() + token.expires_in * 1000 }; delete req.session.oauthState; res.redirect("/"); } catch (err) { res.status(500).send("OAuth callback failed"); } });
@@ -106,4 +106,8 @@ app.post("/api/projects/:projectId/expenses", ensureValidToken, async (req, res)
   }
 });
 app.patch("/api/projects/:projectId/expenses/:expenseId", ensureValidToken, async (req, res) => { try { const containerId = getCostContainerId(req.params.projectId); const expense = await updateExpense(req.session.aps.access_token, containerId, req.params.expenseId, req.body); res.json({ ok: true, expense }); } catch (err) { res.status(500).json({ error: err.message }); } });
-app.listen(PORT, () => console.log(`ACC Expense app v25 running on http://localhost:${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`ACC Expense app v26 running on http://localhost:${PORT}`));
+}
+
+module.exports = app;
