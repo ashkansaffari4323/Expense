@@ -1,7 +1,7 @@
 {
-  "name": "acc-expense-full-app-v22",
-  "version": "1.0.22",
-  "description": "ACC Cost expense importer with project budget and company Excel dropdowns.",
+  "name": "acc-expense-full-app-v28",
+  "version": "1.0.28",
+  "description": "ACC Cost expense importer with Vercel OAuth fix, budget/company Excel dropdowns, invoice type, paid date, and approval fallback.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
@@ -10,7 +10,6 @@
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
-    "express-session": "^1.18.0",
     "multer": "^2.0.0"
   }
 }

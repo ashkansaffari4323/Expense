@@ -1,64 +1,10 @@
-let lastCostRequest = null;
-
-async function parseResponse(response) {
-  const text = await response.text();
-  if (!text) return null;
-  try { return JSON.parse(text); } catch (_) { return text; }
-}
-
-function errorFor(method, url, response, body) {
-  const detail = typeof body === "string" ? body : JSON.stringify(body, null, 2);
-  return new Error(`APS ${method} ${url} failed (${response.status}): ${detail}`);
-}
-
-function headers(accessToken, url, json = false) {
-  const h = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
-  if (json) h["Content-Type"] = "application/json";
-  if (process.env.APS_COST_REGION && url.includes("developer.api.autodesk.com/cost/v1")) {
-    h.Region = process.env.APS_COST_REGION;
-  }
-  return h;
-}
-
-function recordCostRequest(method, url, requestHeaders, body) {
-  if (!url.includes("developer.api.autodesk.com/cost/v1")) return;
-  lastCostRequest = {
-    method,
-    url,
-    headers: { ...requestHeaders, Authorization: "Bearer [hidden]" },
-    body: body || undefined,
-    at: new Date().toISOString()
-  };
-  console.log("Cost API request", lastCostRequest);
-}
-
-async function apsGet(accessToken, url) {
-  const requestHeaders = headers(accessToken, url);
-  recordCostRequest("GET", url, requestHeaders);
-  const response = await fetch(url, { method: "GET", headers: requestHeaders });
-  const body = await parseResponse(response);
-  if (!response.ok) throw errorFor("GET", url, response, body);
-  return body;
-}
-
-async function apsPost(accessToken, url, payload) {
-  const requestHeaders = headers(accessToken, url, true);
-  recordCostRequest("POST", url, requestHeaders, payload || {});
-  const response = await fetch(url, { method: "POST", headers: requestHeaders, body: JSON.stringify(payload || {}) });
-  const body = await parseResponse(response);
-  if (!response.ok) throw errorFor("POST", url, response, body);
-  return body;
-}
-
-async function apsPatch(accessToken, url, payload) {
-  const requestHeaders = headers(accessToken, url, true);
-  recordCostRequest("PATCH", url, requestHeaders, payload || {});
-  const response = await fetch(url, { method: "PATCH", headers: requestHeaders, body: JSON.stringify(payload || {}) });
-  const body = await parseResponse(response);
-  if (!response.ok) throw errorFor("PATCH", url, response, body);
-  return body;
-}
-
-function getLastCostRequest() { return lastCostRequest; }
-
-module.exports = { apsGet, apsPost, apsPatch, getLastCostRequest };
+let lastCostRequest=null;
+async function parse(r){const t=await r.text();if(!t)return null;try{return JSON.parse(t)}catch{return t}}
+function err(m,u,r,b){return new Error(`APS ${m} ${u} failed (${r.status}): ${typeof b==="string"?b:JSON.stringify(b,null,2)}`)}
+function headers(token,url,json=false){const h={Authorization:`Bearer ${token}`,Accept:"application/json"};if(json)h["Content-Type"]="application/json";if(process.env.APS_COST_REGION&&url.includes("developer.api.autodesk.com/cost/v1"))h.Region=process.env.APS_COST_REGION;return h}
+function rec(m,u,h,b){if(!u.includes("developer.api.autodesk.com/cost/v1"))return;lastCostRequest={method:m,url:u,headers:{...h,Authorization:"Bearer [hidden]"},body:b,at:new Date().toISOString()};console.log("Cost API request",lastCostRequest)}
+async function apsGet(token,u){const h=headers(token,u);rec("GET",u,h);const r=await fetch(u,{method:"GET",headers:h});const b=await parse(r);if(!r.ok)throw err("GET",u,r,b);return b}
+async function apsPost(token,u,p){const h=headers(token,u,true);rec("POST",u,h,p||{});const r=await fetch(u,{method:"POST",headers:h,body:JSON.stringify(p||{})});const b=await parse(r);if(!r.ok)throw err("POST",u,r,b);return b}
+async function apsPatch(token,u,p){const h=headers(token,u,true);rec("PATCH",u,h,p||{});const r=await fetch(u,{method:"PATCH",headers:h,body:JSON.stringify(p||{})});const b=await parse(r);if(!r.ok)throw err("PATCH",u,r,b);return b}
+function getLastCostRequest(){return lastCostRequest}
+module.exports={apsGet,apsPost,apsPatch,getLastCostRequest};
