@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ACC Expenses</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="frame">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">$</span>
+        <div>
+          <div class="brand-name">ACC Expenses</div>
+          <div class="brand-sub">Expense import</div>
+        </div>
+      </div>
+      <div id="authArea">
+        <a id="signInBtn" class="btn btn-primary" href="/api/auth/login">Sign in to Autodesk</a>
+      </div>
+    </header>
+
+    <main id="app" class="app hidden">
+      <section class="rail">
+        <div class="rail-step"><label>Hub</label><select id="hubSelect"><option>Loading...</option></select></div>
+        <div class="rail-step"><label>Project</label><select id="projectSelect" disabled><option>Select hub first</option></select></div>
+        <button id="loadCostBtn" class="btn btn-secondary full" disabled>Load budgets</button>
+        <a id="templateBtn" class="btn btn-secondary full disabled-link" href="#">Download template with budgets</a>
+        <div class="rail-step space-top"><label>Upload Excel</label><input id="excelInput" type="file" accept=".xlsx,.xls" disabled /></div>
+        <button id="uploadBtn" class="btn btn-secondary full" disabled>Preview Excel</button>
+        <button id="createExpensesBtn" class="btn btn-primary full" disabled>Create Expenses</button>
+      </section>
+
+      <section class="results">
+        <div id="emptyState" class="empty-state">
+          <div class="empty-glyph">$</div>
+          <p>Load budgets, download the template, choose budget in Excel, then create expenses.</p>
+        </div>
+        <div id="errorState" class="error-state hidden"></div>
+        <div id="resultsPanel" class="hidden">
+          <div class="panel compact-panel">
+            <div class="panel-head">
+              <h2>Budgets</h2>
+              <input id="budgetSearch" class="mini-input" placeholder="Search budgets..." />
+            </div>
+            <div class="table-scroll budget-scroll">
+              <table class="data-table compact-table">
+                <thead><tr><th>Code</th><th>Name</th><th>ID</th></tr></thead>
+                <tbody id="budgetsBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel compact-panel">
+            <div class="panel-head"><h2>Excel Rows</h2><span class="hint">Preview is optional</span></div>
+            <div class="table-scroll row-scroll">
+              <table class="data-table compact-table rows-table">
+                <thead><tr><th>Supplier</th><th>Invoice</th><th>Type</th><th>Paid</th><th>Budget</th><th>Item</th><th>Qty</th><th>Unit</th><th>Amount</th><th>Status</th></tr></thead>
+                <tbody id="parsedBody"><tr><td colspan="10">No Excel file read yet.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel compact-panel">
+            <div class="panel-head"><h2>Import Results</h2><button id="clearLogBtn" class="tiny-btn" type="button">Clear</button></div>
+            <pre id="importResults" class="log-box">No import run yet.</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

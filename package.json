@@ -1,0 +1,16 @@
+{
+  "name": "acc-expense-full-app-v25",
+  "version": "1.0.25",
+  "description": "ACC Cost expense importer with project budget and company Excel dropdowns.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
+  "engines": { "node": ">=18.0.0" },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "multer": "^2.0.0"
+  }
+}
