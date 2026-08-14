@@ -1,6 +1,6 @@
 const ExcelJS = require("exceljs");
 
-const HEADERS = ["Supplier Company", "Invoice Number", "Reference Number", "Expense Name", "Expense Description", "Type", "Issue Date", "Received Date", "Payment Due Date", "Paid Date", "Budget", "Expense Item Name", "Expense Item Description", "Quantity", "Unit", "Unit Price", "Amount", "Status"];
+const HEADERS = ["Supplier Company", "Invoice Number", "Reference Number", "Expense Name", "Expense Description", "Issue Date", "Received Date", "Payment Due Date", "Budget", "Expense Item Name", "Expense Item Description", "Quantity", "Unit", "Unit Price", "Amount", "Status"];
 const REQUIRED = ["Supplier Company", "Invoice Number", "Budget", "Expense Item Name", "Quantity", "Unit", "Unit Price", "Amount"];
 const norm = (v) => String(v || "").trim().toLowerCase();
 
@@ -37,8 +37,8 @@ function iso(v, name, rowNum) {
 }
 function num(v, name, rowNum, def = 0) { if (v === "" || v === null || v === undefined) return def; const n = Number(v); if (Number.isNaN(n)) throw new Error(`Invalid number row ${rowNum}, column ${name}: ${v}.`); return n; }
 function style(sheet) {
-  sheet.getRow(1).font = { bold: true }; sheet.views = [{ state: "frozen", ySplit: 1 }]; sheet.autoFilter = { from: "A1", to: "R1" };
-  [30,18,18,30,32,14,16,16,18,16,48,28,32,12,10,14,14,14].forEach((w, i) => sheet.getColumn(i + 1).width = w);
+  sheet.getRow(1).font = { bold: true }; sheet.views = [{ state: "frozen", ySplit: 1 }]; sheet.autoFilter = { from: "A1", to: "P1" };
+  [30,18,18,30,32,16,16,18,48,28,32,12,10,14,14,14].forEach((w, i) => sheet.getColumn(i + 1).width = w);
 }
 
 async function buildExpenseImportTemplate({ budgets = [], companies = [] } = {}) {
@@ -46,8 +46,8 @@ async function buildExpenseImportTemplate({ budgets = [], companies = [] } = {})
   const sheet = wb.addWorksheet("Expenses"); sheet.addRow(HEADERS);
   const sampleCompany = companies[0] ? companyLabel(companies[0]) : "Type supplier name or select a company";
   const sampleBudget = budgets[0] ? budgetLabel(budgets[0]) : "Load project budgets first";
-  sheet.addRow([sampleCompany, "INV-001", "INV-001", "ABC Electrical Pty Ltd - INV-001", "Progress claim", "Invoice", "2026-08-01", "2026-08-02", "2026-09-01", "2026-08-13", sampleBudget, "Labour and materials", "Labour and materials", 1, "ls", 5000, 5000, "approved"]);
-  style(sheet); sheet.getColumn(7).numFmt = "yyyy-mm-dd"; sheet.getColumn(8).numFmt = "yyyy-mm-dd"; sheet.getColumn(9).numFmt = "yyyy-mm-dd"; sheet.getColumn(10).numFmt = "yyyy-mm-dd";
+  sheet.addRow([sampleCompany, "INV-001", "INV-001", "ABC Electrical Pty Ltd - INV-001", "Progress claim", "2026-08-01", "2026-08-02", "2026-09-01", sampleBudget, "Labour and materials", "Labour and materials", 1, "ls", 5000, 5000, "draft"]);
+  style(sheet); sheet.getColumn(6).numFmt = "yyyy-mm-dd"; sheet.getColumn(7).numFmt = "yyyy-mm-dd"; sheet.getColumn(8).numFmt = "yyyy-mm-dd";
 
   const budgetSheet = wb.addWorksheet("Budget Lookup"); budgetSheet.addRow(["Budget", "Budget ID", "Code", "Name"]);
   for (const b of budgets || []) budgetSheet.addRow([budgetLabel(b), b.id || "", b.code || "", b.name || ""]);
@@ -60,7 +60,7 @@ async function buildExpenseImportTemplate({ budgets = [], companies = [] } = {})
   const lastBudgetRow = Math.max(2, budgets.length + 1);
   const lastCompanyRow = Math.max(2, companies.length + 1);
   for (let r = 2; r <= 501; r++) {
-    sheet.getCell(`K${r}`).dataValidation = { type: "list", allowBlank: false, formulae: [`'Budget Lookup'!$A$2:$A$${lastBudgetRow}`], showErrorMessage: true, errorTitle: "Select budget", error: "Choose a budget from the dropdown." };
+    sheet.getCell(`I${r}`).dataValidation = { type: "list", allowBlank: false, formulae: [`'Budget Lookup'!$A$2:$A$${lastBudgetRow}`], showErrorMessage: true, errorTitle: "Select budget", error: "Choose a budget from the dropdown." };
     if (companies.length) sheet.getCell(`A${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [`'Company Lookup'!$A$2:$A$${lastCompanyRow}`], showErrorMessage: false };
   }
   return wb.xlsx.writeBuffer();
@@ -95,11 +95,9 @@ async function parseExpenseImportFile(buffer, budgets = [], companies = []) {
       referenceNumber: cell(row, headerMap, "Reference Number") || invoiceNumber,
       expenseName: cell(row, headerMap, "Expense Name") || (supplierName && invoiceNumber ? `${supplierName} - ${invoiceNumber}` : supplierName || invoiceNumber || "Imported Expense"),
       description: cell(row, headerMap, "Expense Description"),
-      type: cell(row, headerMap, "Type") || "Invoice",
       issuedAt: iso(cell(row, headerMap, "Issue Date"), "Issue Date", rowNum),
       receivedAt: iso(cell(row, headerMap, "Received Date"), "Received Date", rowNum),
       paymentDue: iso(cell(row, headerMap, "Payment Due Date"), "Payment Due Date", rowNum),
-      paidAt: iso(cell(row, headerMap, "Paid Date"), "Paid Date", rowNum),
       budgetId: budget.id,
       budgetCode: budget.code || "",
       budgetName: budget.name || "",
