@@ -1,15 +1,13 @@
-# ACC Expense Full App v28
+# ACC Expense Full App v29
 
-Correct package version: `1.0.28`.
+Correct package version: `1.0.29`.
 
-Includes:
-- Vercel Express routing via `vercel.json`
-- Stateless Autodesk OAuth state for Vercel serverless
-- Encrypted HttpOnly token cookie
-- ACC Cost budgets and expense creation
-- Project company dropdown in Excel template
-- Invoice Type and Paid Date from Excel
-- Create as draft, then try to approve, fallback to draft if workflow blocks approval
+Adds:
+- Excel row summary: total rows, valid rows, duplicate rows, rows already in Cost, rows to create, created/skipped/failed results.
+- Duplicate Excel validation by Expense Name.
+- Existing Cost duplicate protection by Expense Name or Reference Number.
+- Duplicate rows are reported and skipped instead of loaded again.
+- Existing Cost expenses are reported and skipped instead of loaded again.
 
 Check deployment:
 
@@ -17,8 +15,8 @@ Check deployment:
 https://expense-seven-beta.vercel.app/api/version
 ```
 
-Expected:
+Expected response includes:
 
 ```json
-{"version":"v28","package":"1.0.28"}
+{"version":"v29","package":"1.0.29"}
 ```
