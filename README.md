@@ -1,16 +1,12 @@
-# ACC Expense Full App v35
-Version 1.0.35.
+# ACC Expense Full App v41
+Version 1.0.41.
 
-## Duplicate rule changed
-The app now checks duplicates using **Workday Unique ID only**.
-
-### Excel duplicate check
-- If two Excel rows have the same `Workday Unique ID`, the later row is marked `Repeated in Excel` and skipped.
-- Expense Name and Reference Number are no longer used to decide Excel duplicates.
-
-### Existing Cost duplicate check
-- The app checks existing ACC Cost expenses only where existing `referenceNumber` equals the Excel `Workday Unique ID`.
-- Expense Name and Reference Number are no longer used for the existing-cost duplicate check.
-- Skipped rows now return `matchedBy`, `matchedValue`, and existing expense details where available.
-
-Keeps v34 wrapping/copyable API result UI and v33 approved-with-nested-item approval logic.
+## Changes
+- Renamed visible Excel column from `Workday Unique ID` to `Reference Number`.
+- Reference Number is no longer treated as a unique key and can be duplicated.
+- Same Expense Name can repeat within the same Excel import and will create one parent with multiple line items.
+- The only duplicate blocker is now: if the same Expense Name already exists in Forma/ACC Cost for that same project, the app will not create it.
+- Existing-cost duplicate result shows `matchedBy: Expense Name`.
+- Supplier auto-fill by same Expense Name remains.
+- Status can still be `paid`, with draft -> approved -> paid flow.
+- Amount remains calculated as Quantity * Unit Price.
