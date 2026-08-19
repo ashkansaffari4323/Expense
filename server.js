@@ -1,1 +1,131 @@
-require("dotenv").config();const express=require("express"),path=require("path"),multer=require("multer");const{buildAuthorizeUrl,exchangeCodeForToken,ensureValidToken,createOAuthState,validateOAuthState,setAuthCookie,clearAuthCookie,getAuthFromRequest}=require("./src/auth");const{getLastCostRequest}=require("./src/apsClient");const{getHubs,getProjects,getCostContainerId,getBudgets,getExpenses,createExpense,createExpenseItem,updateExpense}=require("./src/costApi");const{getProjectCompanies}=require("./src/adminApi");const{buildExpenseImportTemplate,parseExpenseImportFile,expenseKey}=require("./src/templates");const app=express(),PORT=process.env.PORT||4000,upload=multer({storage:multer.memoryStorage()});app.use(express.json({limit:"10mb"}));app.use(express.static(path.join(__dirname,"public")));app.get("/",(_,res)=>res.sendFile(path.join(__dirname,"public","index.html")));app.get("/api/version",(_,res)=>res.json({ok:true,version:"v29",package:"1.0.29",features:["row-summary","excel-duplicate-detection","existing-cost-duplicate-skip"]}));app.get("/api/debug/last-cost-request",(_,res)=>res.json({ok:true,lastCostRequest:getLastCostRequest()}));app.get("/api/auth/login",(_,res)=>res.redirect(buildAuthorizeUrl(createOAuthState())));app.get("/api/auth/callback",async(req,res)=>{try{const{code,state,error,error_description}=req.query;if(error)return res.status(400).send(`Autodesk sign-in failed: ${error_description||error}`);if(!code||!validateOAuthState(state))return res.status(400).send("Invalid OAuth callback");const t=await exchangeCodeForToken(code);setAuthCookie(res,{access_token:t.access_token,refresh_token:t.refresh_token,expires_at:Date.now()+t.expires_in*1000});res.redirect("/")}catch(e){res.status(500).send(`OAuth callback failed: ${e.message}`)}});app.get("/api/auth/status",(req,res)=>res.json({signedIn:!!getAuthFromRequest(req)}));app.post("/api/auth/logout",(_,res)=>{clearAuthCookie(res);res.json({ok:true})});app.get("/api/hubs",ensureValidToken,async(req,res)=>{try{const hubs=await getHubs(req.aps.access_token);res.json(hubs.map(h=>({id:h.id,name:h.attributes?.name||h.name||h.id})))}catch(e){res.status(500).json({error:e.message})}});app.get("/api/hubs/:hubId/projects",ensureValidToken,async(req,res)=>{try{res.json(await getProjects(req.aps.access_token,req.params.hubId))}catch(e){res.status(500).json({error:e.message})}});app.get("/api/projects/:projectId/budgets",ensureValidToken,async(req,res)=>{try{const id=getCostContainerId(req.params.projectId);res.json({containerId:id,budgets:await getBudgets(req.aps.access_token,id)})}catch(e){res.status(500).json({error:e.message})}});app.get("/api/hubs/:hubId/projects/:projectId/templates/expense-import",ensureValidToken,async(req,res)=>{try{const id=getCostContainerId(req.params.projectId);const[budgets,companies]=await Promise.all([getBudgets(req.aps.access_token,id),getProjectCompanies(req.params.hubId,req.params.projectId).catch(()=>[])]);const b=await buildExpenseImportTemplate({budgets,companies});res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");res.setHeader("Content-Disposition","attachment; filename=expense-import-template.xlsx");res.send(Buffer.from(b))}catch(e){res.status(500).json({error:e.message})}});app.post("/api/hubs/:hubId/projects/:projectId/import-excel",ensureValidToken,upload.single("file"),async(req,res)=>{try{if(!req.file)return res.status(400).json({error:"No Excel file uploaded"});const id=getCostContainerId(req.params.projectId);const[budgets,companies,existing]=await Promise.all([getBudgets(req.aps.access_token,id),getProjectCompanies(req.params.hubId,req.params.projectId).catch(()=>[]),getExpenses(req.aps.access_token,id).catch(()=>[])]);const parsed=await parseExpenseImportFile(req.file.buffer,budgets,companies);const existingKeys=new Set((existing||[]).map(e=>String(e.name||e.expenseName||e.referenceNumber||"").trim().toLowerCase()).filter(Boolean));const existingDuplicates=[];for(const r of parsed.rows){if(existingKeys.has(String(r.expenseName||"").trim().toLowerCase())||existingKeys.has(String(r.referenceNumber||"").trim().toLowerCase())){r.existsInCost=true;existingDuplicates.push({rowNumber:r.excelRowNumber,expenseName:r.expenseName,referenceNumber:r.referenceNumber})}}parsed.summary.existingInCostRows=existingDuplicates.length;parsed.summary.rowsToCreate=parsed.rows.filter(r=>!r.duplicateInExcel&&!r.existsInCost).length;res.json({ok:true,containerId:id,rows:parsed.rows,summary:parsed.summary,duplicateRows:parsed.duplicateRows,existingDuplicates})}catch(e){res.status(500).json({error:e.message})}});app.post("/api/projects/:projectId/expenses",ensureValidToken,async(req,res)=>{try{const token=req.aps.access_token,id=getCostContainerId(req.params.projectId),requestedStatus=String(req.body.status||"approved").toLowerCase();if(req.body.duplicateInExcel)return res.json({ok:true,skipped:true,reason:"duplicate-in-excel",row:req.body.excelRowNumber,expenseName:req.body.expenseName});if(req.body.existsInCost)return res.json({ok:true,skipped:true,reason:"already-exists-in-cost",row:req.body.excelRowNumber,expenseName:req.body.expenseName});const p={supplierName:req.body.supplierName||null,name:req.body.expenseName||req.body.name||"Imported Expense",referenceNumber:req.body.referenceNumber||req.body.invoiceNumber||"",description:req.body.description||"",type:req.body.type||"Invoice",status:"draft"};if(req.body.supplierCompanyUid)p.supplierCompanyUid=req.body.supplierCompanyUid;for(const k of["issuedAt","receivedAt","paymentDue","paidAt"])if(req.body[k])p[k]=req.body[k];const expense=await createExpense(token,id,p);let expenseItem=null;if(expense?.id&&req.body.budgetId){const amount=req.body.amount==null||req.body.amount===""?0:Number(req.body.amount);expenseItem=await createExpenseItem(token,id,expense.id,{budgetId:req.body.budgetId,name:req.body.itemName||req.body.itemDescription||req.body.expenseName||"Imported Expense Item",description:req.body.itemDescription||req.body.description||"",scope:req.body.scope||"full",quantity:req.body.quantity||1,unitPrice:req.body.unitPrice||amount,unit:req.body.unit||"ls",amount,exchangeRate:req.body.exchangeRate||1})}let finalExpense=expense,finalStatus="draft",approvalAttempt=null;if(["approved","paid","pending"].includes(requestedStatus)&&expense?.id){try{finalExpense=await updateExpense(token,id,expense.id,{status:requestedStatus});finalStatus=requestedStatus;approvalAttempt={ok:true,requestedStatus,finalStatus}}catch(e){approvalAttempt={ok:false,requestedStatus,finalStatus:"draft",fallback:"draft",message:"Autodesk blocked automatic status update. Kept as draft.",autodeskError:e.message}}}res.json({ok:true,created:true,containerId:id,requestedStatus,finalStatus,expense:finalExpense,expenseItem,approvalAttempt})}catch(e){res.status(500).json({error:e.message})}});if(require.main===module)app.listen(PORT,()=>console.log(`ACC Expense app v29 running on http://localhost:${PORT}`));module.exports=app;
+require("dotenv").config();
+const express=require("express"),path=require("path"),multer=require("multer");
+const auth=require("./src/auth"),cost=require("./src/cost"),admin=require("./src/admin"),xlsx=require("./src/xlsx"),aps=require("./src/aps");
+const app=express(),upload=multer({storage:multer.memoryStorage()}),PORT=process.env.PORT||4000;
+app.use(express.json({limit:"10mb"}));app.use(express.static(path.join(__dirname,"public")));
+app.get("/",(_,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
+app.get("/api/version",(_,res)=>res.json({ok:true,version:"v35",package:"1.0.35",ui:"modern-project-selection-project-name-preview",approvalLogic:"workday-id-only-duplicate-check"}));
+app.get("/api/debug/last-cost-request",(_,res)=>res.json({ok:true,lastCostRequest:aps.last()}));
+app.get("/api/auth/login",(_,res)=>res.redirect(auth.loginUrl(auth.state())));
+app.get("/api/auth/callback",async(req,res)=>{try{const{code,state,error}=req.query;if(error)return res.status(400).send(String(error));if(!code||!auth.valid(state))return res.status(400).send("Invalid OAuth callback");const t=await auth.exchange(code);auth.set(res,{access_token:t.access_token,refresh_token:t.refresh_token,expires_at:Date.now()+t.expires_in*1000});res.redirect("/");}catch(e){res.status(500).send(e.message);}});
+app.get("/api/auth/status",(req,res)=>res.json({signedIn:!!auth.get(req)}));
+app.post("/api/auth/logout",(_,res)=>{auth.clear(res);res.json({ok:true});});
+app.get("/api/hubs",auth.ensure,async(req,res)=>{try{const h=await cost.hubs(req.aps.access_token);res.json(h.map(x=>({id:x.id,name:x.attributes?.name||x.id})));}catch(e){res.status(500).json({error:e.message});}});
+app.get("/api/hubs/:hubId/projects",auth.ensure,async(req,res)=>{try{res.json(await cost.projects(req.aps.access_token,req.params.hubId));}catch(e){res.status(500).json({error:e.message});}});
+async function context(req,projectIds){if(!projectIds.length)throw new Error("Select at least one project.");const all=await cost.projects(req.aps.access_token,req.params.hubId);const wanted=new Set(projectIds);const projects=all.filter(p=>wanted.has(p.id)).slice(0,100);if(!projects.length)throw new Error("No selected projects were found in the signed-in user's accessible project list.");const budgetsByProject={};for(const p of projects)budgetsByProject[p.id]=await cost.budgets(req.aps.access_token,p.id);const companies=projects[0]?await admin.companies(req.params.hubId,projects[0].id):[];return{projects,budgetsByProject,companies};}
+app.get("/api/hubs/:hubId/templates/multi",auth.ensure,async(req,res)=>{try{const ids=String(req.query.projectIds||"").split(",").filter(Boolean);const ctx=await context(req,ids);const b=await xlsx.buildTemplate(ctx);res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");res.setHeader("Content-Disposition","attachment; filename=multi-project-expense-template.xlsx");res.send(Buffer.from(b));}catch(e){res.status(500).json({error:e.message});}});
+app.post("/api/hubs/:hubId/import-excel",auth.ensure,upload.single("file"),async(req,res)=>{try{if(!req.file)throw new Error("Choose an Excel file first.");const projectIds=String(req.body.projectIds||"").split(",").filter(Boolean);const ctx=await context(req,projectIds);const parsed=await xlsx.parse(req.file.buffer,ctx.projects,ctx.budgetsByProject);const existingByProject={};for(const p of ctx.projects)existingByProject[p.id]=await cost.expenses(req.aps.access_token,p.id).catch(()=>[]);const existing=[];for(const r of parsed.rows){
+  const workday=String(r.workdayUniqueId||"").trim().toLowerCase();
+  if(!workday) continue;
+  const match=(existingByProject[r.projectId]||[]).find(e=>String(e.referenceNumber||"").trim().toLowerCase()===workday);
+  if(match){
+    r.existsInCost=true;
+    r.matchedBy="Workday Unique ID";
+    r.matchedValue=r.workdayUniqueId;
+    r.existingExpense={id:match.id,number:match.number,name:match.name,referenceNumber:match.referenceNumber,status:match.status};
+    existing.push({rowNumber:r.excelRowNumber,projectName:r.projectName,workdayUniqueId:r.workdayUniqueId,expenseName:r.expenseName,matchedBy:"Workday Unique ID",matchedValue:r.workdayUniqueId,existingExpense:r.existingExpense});
+  }
+}
+parsed.summary.existingInCostRows=existing.length;parsed.summary.rowsToCreate=parsed.rows.filter(r=>!r.duplicateInExcel&&!r.existsInCost).length;res.json({...parsed,existingDuplicates:existing});}catch(e){res.status(500).json({error:e.message});}});
+app.post("/api/projects/:projectId/expenses",auth.ensure,async(req,res)=>{
+  try{
+    if(req.body.duplicateInExcel)return res.json({ok:true,skipped:true,reason:"duplicate-in-excel"});
+    if(req.body.existsInCost)return res.json({ok:true,skipped:true,reason:"already-exists-in-cost",matchedBy:req.body.matchedBy||"Workday Unique ID",matchedValue:req.body.matchedValue||req.body.workdayUniqueId,existingExpense:req.body.existingExpense||null});
+
+    const id=req.params.projectId;
+    const t=req.aps.access_token;
+    const requested=String(req.body.status||"approved").toLowerCase();
+
+    const basePayload={
+      supplierName:req.body.supplierName||null,
+      name:req.body.expenseName,
+      referenceNumber:req.body.workdayUniqueId||req.body.referenceNumber||"",
+      description:req.body.description||"",
+      type:req.body.type||"Invoice"
+    };
+    for(const k of["issuedAt","receivedAt","paymentDue","paidAt"]){
+      if(req.body[k])basePayload[k]=req.body[k];
+    }
+
+    const itemPayload={
+      budgetId:req.body.budgetId,
+      name:req.body.itemName||req.body.workdayUniqueId||req.body.expenseName,
+      description:req.body.itemDescription||"",
+      quantity:req.body.quantity||1,
+      unitPrice:req.body.unitPrice||req.body.amount||0,
+      unit:req.body.unit||"ls",
+      amount:req.body.amount||0,
+      exchangeRate:1
+    };
+
+    let expense=null;
+    let item=null;
+    let createdStatus="draft";
+    let finalStatus="draft";
+    let approvalAttempt=null;
+    let pathUsed="draft-create-item-then-approve";
+
+    // Important Autodesk behaviour found from testing:
+    // If an expense is created as approved first, Autodesk will not allow adding items afterwards.
+    // So for approved rows, first try atomic creation with the item included in the expense payload.
+    if(requested==="approved"){
+      try{
+        expense=await cost.createExpense(t,id,{...basePayload,status:"approved",expenseItems:[itemPayload]});
+        createdStatus="approved";
+        finalStatus="approved";
+        pathUsed="approved-create-with-nested-items";
+        item=(expense.expenseItems&&expense.expenseItems[0])||null;
+        approvalAttempt={ok:true,method:"create-with-nested-items",finalStatus:"approved"};
+      }catch(approvedCreateError){
+        approvalAttempt={
+          ok:false,
+          method:"create-with-nested-items",
+          fallback:"draft",
+          message:"Approved create with nested item was rejected. Creating as draft, adding item, then trying status update.",
+          autodeskError:approvedCreateError.message
+        };
+      }
+    }
+
+    if(!expense){
+      expense=await cost.createExpense(t,id,{...basePayload,status:"draft"});
+      createdStatus="draft";
+      finalStatus="draft";
+      item=await cost.createItem(t,id,expense.id,itemPayload);
+
+      if(requested==="approved"){
+        try{
+          await cost.updateExpense(t,id,expense.id,{status:"approved"});
+          finalStatus="approved";
+          approvalAttempt={ok:true,method:"patch-after-item",finalStatus:"approved"};
+        }catch(patchError){
+          finalStatus="draft";
+          approvalAttempt={
+            ok:false,
+            method:"patch-after-item",
+            fallback:"draft",
+            message:"Autodesk rejected draft to approved status update. Expense item was created successfully, but expense remains draft.",
+            autodeskError:patchError.message
+          };
+        }
+      }
+    }
+
+    res.json({
+      ok:true,
+      created:true,
+      requestedStatus:requested,
+      createdStatus,
+      finalStatus,
+      pathUsed,
+      projectName:req.body.projectName,
+      expense,
+      expenseItem:item,
+      approvalAttempt
+    });
+  }catch(e){
+    res.status(500).json({error:e.message});
+  }
+});
+if(require.main===module)app.listen(PORT,()=>console.log(`ACC Expense app v35 running on http://localhost:${PORT}`));
+module.exports=app;

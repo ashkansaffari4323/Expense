@@ -1,22 +1,16 @@
-# ACC Expense Full App v29
+# ACC Expense Full App v35
+Version 1.0.35.
 
-Correct package version: `1.0.29`.
+## Duplicate rule changed
+The app now checks duplicates using **Workday Unique ID only**.
 
-Adds:
-- Excel row summary: total rows, valid rows, duplicate rows, rows already in Cost, rows to create, created/skipped/failed results.
-- Duplicate Excel validation by Expense Name.
-- Existing Cost duplicate protection by Expense Name or Reference Number.
-- Duplicate rows are reported and skipped instead of loaded again.
-- Existing Cost expenses are reported and skipped instead of loaded again.
+### Excel duplicate check
+- If two Excel rows have the same `Workday Unique ID`, the later row is marked `Repeated in Excel` and skipped.
+- Expense Name and Reference Number are no longer used to decide Excel duplicates.
 
-Check deployment:
+### Existing Cost duplicate check
+- The app checks existing ACC Cost expenses only where existing `referenceNumber` equals the Excel `Workday Unique ID`.
+- Expense Name and Reference Number are no longer used for the existing-cost duplicate check.
+- Skipped rows now return `matchedBy`, `matchedValue`, and existing expense details where available.
 
-```text
-https://expense-seven-beta.vercel.app/api/version
-```
-
-Expected response includes:
-
-```json
-{"version":"v29","package":"1.0.29"}
-```
+Keeps v34 wrapping/copyable API result UI and v33 approved-with-nested-item approval logic.
