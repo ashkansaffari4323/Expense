@@ -1,1 +1,112 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Multi Expense</title><link rel="stylesheet" href="style.css"></head><body><header><h1>Multi Expense</h1><div id="auth"><a href="/api/auth/login">Sign in</a></div></header><main id="app" hidden><aside><select id="hub"></select><input id="search" placeholder="Search projects"><div id="projects"></div><button id="load">Load selected</button><a id="template">Download template</a><input id="file" type="file"><button id="preview">Preview</button><button id="create">Create expenses</button></aside><section><div id="summary"></div><table><thead><tr><th>Row</th><th>Project</th><th>Expense</th><th>PO</th><th>Item</th><th>Amount</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table><textarea id="log" readonly></textarea></section></main><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#071f1b">
+  <title>Forma Workday Expense Solution</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <section id="landing" class="landing">
+    <nav class="landing-nav">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">FW</div>
+        <div>
+          <strong>Forma Workday</strong>
+          <span>Expense Solution</span>
+        </div>
+      </div>
+      <span class="secure-label">Secure Autodesk connection</span>
+    </nav>
+
+    <div class="hero-shell">
+      <div class="hero-copy">
+        <span class="eyebrow">WORKDAY TO AUTODESK FORMA</span>
+        <h1>Expense imports, organised across every project.</h1>
+        <p class="hero-lead">Prepare one Excel file, validate expenses and purchase orders, then import grouped expense line items into Autodesk Forma Cost Management.</p>
+        <a class="signin-button" href="/api/auth/login">
+          <span class="autodesk-symbol">A</span>
+          <span>Sign in to Autodesk</span>
+          <span class="arrow">&#8594;</span>
+        </a>
+        <p class="signin-note">Autodesk user context is required. The solution only displays projects available to the signed-in account.</p>
+        <div class="feature-row">
+          <div><b>100</b><span>projects per batch</span></div>
+          <div><b>1</b><span>parent per expense name</span></div>
+          <div><b>Live</b><span>budget and PO lookup</span></div>
+        </div>
+      </div>
+
+      <div class="hero-card" aria-label="Solution workflow preview">
+        <div class="card-top"><span>Import workflow</span><span class="live-dot">Live</span></div>
+        <div class="workflow-step done"><i>1</i><div><b>Select projects</b><span>Choose accessible Forma projects</span></div></div>
+        <div class="connector"></div>
+        <div class="workflow-step done"><i>2</i><div><b>Download smart template</b><span>Budgets and purchase orders included</span></div></div>
+        <div class="connector"></div>
+        <div class="workflow-step active"><i>3</i><div><b>Validate and import</b><span>One parent with grouped line items</span></div></div>
+        <div class="mini-summary">
+          <span><strong>Reference Number</strong> may repeat</span>
+          <span><strong>Expense Name</strong> checked in Forma</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="workspace" class="workspace" hidden>
+    <header class="app-header">
+      <div class="brand compact">
+        <div class="brand-mark">FW</div>
+        <div><strong>Forma Workday</strong><span>Expense Solution</span></div>
+      </div>
+      <div class="header-actions">
+        <span id="connectionState" class="connection-state"><i></i> Autodesk connected</span>
+        <button id="signOut" class="signout-button" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main class="app-layout">
+      <aside class="control-panel">
+        <div class="panel-heading"><span>Import setup</span><small>Step by step</small></div>
+        <label class="field-label" for="hub">Autodesk hub</label>
+        <select id="hub"><option value="">Select hub</option></select>
+
+        <div class="field-head"><label class="field-label" for="search">Projects</label><span id="selectedCount" class="selection-pill">0 selected</span></div>
+        <input id="search" placeholder="Search projects by name">
+        <div class="project-tools"><button id="selectVisible" type="button">Select visible</button><button id="clearSelection" type="button">Clear</button></div>
+        <div id="projects" class="project-list"><div class="placeholder">Select a hub to load projects.</div></div><p class="project-help">Project names stay on one line. Hover to view a long full name.</p>
+
+        <button id="load" class="secondary-action" type="button">Load selected projects</button>
+        <a id="template" class="secondary-action disabled" href="#">Download Excel template</a>
+
+        <label class="field-label file-label" for="file">Completed Excel file</label>
+        <input id="file" type="file" accept=".xlsx,.xls">
+        <button id="preview" class="secondary-action" type="button">Preview and validate</button>
+        <button id="create" class="primary-action" type="button">Create expenses</button>
+      </aside>
+
+      <section class="results-area">
+        <div id="message" class="message" hidden></div>
+        <div id="summary" class="summary-grid"></div>
+        <div class="content-card">
+          <div class="content-title"><div><h2>Excel preview</h2><p>Existing Expense Names in the same project are skipped.</p></div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Row</th><th>Project</th><th>Expense</th><th>Purchase order</th><th>Line item</th><th>Amount</th><th>Status</th></tr></thead>
+              <tbody id="rows"><tr><td colspan="7" class="empty-cell">Upload an Excel file to preview expenses.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="content-card">
+          <div class="content-title"><div><h2>API result</h2><p>Wrapped and ready to copy.</p></div><button id="copyResult" type="button">Copy result</button></div>
+          <textarea id="log" readonly>No import run yet.</textarea>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
