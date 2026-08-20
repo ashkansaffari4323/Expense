@@ -1,19 +1,5 @@
-# Forma Workday Expense Solution v53
+# Forma Workday Expense Solution v54
 
-Complete application package based on v52.
+The Excel Supplier Company column now has a selectable dropdown. Supplier names are collected from project companies, existing expenses, and purchase order or contract supplier details where available. Supplier names remain visible, while internal identifiers are kept out of the visible template. Supplier entered on one row still propagates across the same Project and Expense Name group.
 
-## Template filename
-The downloaded Excel template is now always named:
-
-`Workday Forma Excel Upload.xlsx`
-
-The template filename no longer contains a version number.
-
-## Included
-- Live Expense Name duplicate check immediately before creation
-- No parent contractId, preventing automatic Purchase Order SOV line creation
-- One explicit sub-line item per valid Excel preview row
-- Supplier group propagation and validation
-- Budget and Purchase Order selection
-- Clear Preview and Clear API controls
-- Modern Excel upload button, sign-in page, and import workspace
+The downloaded template remains named `Workday Forma Excel Upload.xlsx`.
