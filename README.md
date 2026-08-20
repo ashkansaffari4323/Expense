@@ -1,9 +1,9 @@
-# Forma Workday Expense Solution v58
+# Forma Workday Expense Solution v59
 
-## Template download performance fix
-- Budget, Purchase Order, and Supplier requests now run in parallel.
-- Company endpoint attempts run in parallel instead of one after another.
-- Company lookups have a 2.5 second hard timeout, so an unavailable Admin API endpoint cannot leave the download spinning.
-- Existing expenses are no longer loaded while generating the template. Duplicate checking still runs during Preview and immediately before Create.
-- Supplier dropdown still uses project/account companies and Purchase Order supplier data when available.
-- The template filename remains `Workday Forma Excel Upload.xlsx`.
+## Budget-only supplier behaviour
+- When Budget is selected and Purchase Order is blank, Supplier Company is not required in Excel.
+- Preview shows `Not required` instead of `Missing supplier`.
+- The row remains valid and can be created.
+- Because Autodesk Expense POST technically requires a supplier field, the app sends the controlled fallback `supplierName: No Purchase Order` only for a budget-only expense with no supplier.
+- When a Purchase Order is selected, the app still resolves its supplier automatically. If the selected Purchase Order has no supplier, Excel Supplier Company remains required as fallback.
+- The downloaded template remains named `Workday Forma Excel Upload.xlsx`.
