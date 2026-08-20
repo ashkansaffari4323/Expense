@@ -1,5 +1,10 @@
-# Forma Workday Expense Solution v54
+# Forma Workday Expense Solution v57
 
-The Excel Supplier Company column now has a selectable dropdown. Supplier names are collected from project companies, existing expenses, and purchase order or contract supplier details where available. Supplier names remain visible, while internal identifiers are kept out of the visible template. Supplier entered on one row still propagates across the same Project and Expense Name group.
-
-The downloaded template remains named `Workday Forma Excel Upload.xlsx`.
+## Automatic Purchase Order supplier
+- When a Purchase Order is selected, the app resolves supplier details from the selected Autodesk contract/PO.
+- Purchase Order supplier takes priority over a manually entered Excel supplier.
+- Preview shows `(PO)` next to supplier names resolved from Purchase Orders.
+- Parent Expense POST includes supplierName and, when returned by Autodesk, supplierId and supplierCompanyUid.
+- Excel Supplier Company dropdown remains available as fallback.
+- If Purchase Orders under one parent resolve to different suppliers, Preview/Create blocks the group as conflicting.
+- The downloaded template remains `Workday Forma Excel Upload.xlsx`.
