@@ -1,8 +1,9 @@
-# Forma Workday Expense Solution v47
+# Forma Workday Expense Solution v48
 
-## Changes
-- Excel Preview now displays **Budget Name** next to Purchase Order.
-- Preview table uses fit-to-content columns while keeping the existing readable font size.
-- Long content uses sensible column widths and table scrolling rather than shrinking text.
-- The authenticated workspace now visually matches the quality of the starter page with improved background, cards, spacing, shadows, controls, summary tiles, and responsive layout.
-- Includes all v46 Budget / Purchase Order dropdown and validation fixes.
+Corrected full build:
+- Removes false Budget / Purchase Order relationship errors.
+- The `budgets-contracts:link` endpoint is not called because it changes configuration and does not retrieve links.
+- Preview validates that Budget and optional Purchase Order each belong to the selected project.
+- Autodesk expense item creation remains final validation.
+- Modern landing page and fully modernised import workspace.
+- Budget visible in preview, reliable selectable dropdowns, optional supplier, grouped line items, paid status flow.
