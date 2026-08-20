@@ -1,10 +1,9 @@
-# Forma Workday Expense Solution v57
+# Forma Workday Expense Solution v58
 
-## Automatic Purchase Order supplier
-- When a Purchase Order is selected, the app resolves supplier details from the selected Autodesk contract/PO.
-- Purchase Order supplier takes priority over a manually entered Excel supplier.
-- Preview shows `(PO)` next to supplier names resolved from Purchase Orders.
-- Parent Expense POST includes supplierName and, when returned by Autodesk, supplierId and supplierCompanyUid.
-- Excel Supplier Company dropdown remains available as fallback.
-- If Purchase Orders under one parent resolve to different suppliers, Preview/Create blocks the group as conflicting.
-- The downloaded template remains `Workday Forma Excel Upload.xlsx`.
+## Template download performance fix
+- Budget, Purchase Order, and Supplier requests now run in parallel.
+- Company endpoint attempts run in parallel instead of one after another.
+- Company lookups have a 2.5 second hard timeout, so an unavailable Admin API endpoint cannot leave the download spinning.
+- Existing expenses are no longer loaded while generating the template. Duplicate checking still runs during Preview and immediately before Create.
+- Supplier dropdown still uses project/account companies and Purchase Order supplier data when available.
+- The template filename remains `Workday Forma Excel Upload.xlsx`.
