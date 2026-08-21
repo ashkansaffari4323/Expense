@@ -147,75 +147,32 @@ $('clearPreview').onclick = () => {
 };
 
 $('clearApi').onclick = () => { $('log').value = 'No API result yet.'; };
-$('create').onclick = async () => {
-  if ($('create').disabled) return;
-  const valid = rows.filter((row) => row.selectionValid && !row.existsInCost);
-  if (!valid.length) return setActionStatus('There are no valid rows to create.', true);
-  if (valid.length > 1200) return setActionStatus('Maximum 1,200 valid rows.', true);
-  const map = new Map();
-  for (const row of valid) {
-    const key = `${row.projectId}|${row.expenseName.toLowerCase()}`;
-    if (!map.has(key)) map.set(key, { projectId: row.projectId, project: row.projectName, expenseName: row.expenseName, rows: [] });
-    map.get(key).rows.push(row);
+$('create').onclick=async()=>{
+  if($('create').disabled)return;
+  const valid=rows.filter(x=>x.selectionValid&&!x.existsInCost);
+  if(!valid.length)return setActionStatus('No valid rows.',true);
+  if(valid.length>1200)return setActionStatus('Maximum 1,200 valid rows.',true);
+  const logicalMap=new Map();
+  for(const x of valid){const key=`${x.projectId}|${x.expenseName.toLowerCase()}`;if(!logicalMap.has(key))logicalMap.set(key,{projectId:x.projectId,project:x.projectName,originalExpenseName:x.expenseName,rows:[]});logicalMap.get(key).rows.push(x)}
+  const parents=[];
+  for(const logical of logicalMap.values()){
+    const totalParts=Math.ceil(logical.rows.length/300);
+    for(let i=0;i<logical.rows.length;i+=300){const partNumber=Math.floor(i/300)+1;parents.push({...logical,partNumber,totalParts,parentName:totalParts>1?`${logical.originalExpenseName} - Part ${partNumber} of ${totalParts}`:logical.originalExpenseName,rows:logical.rows.slice(i,i+300)})}
   }
-  const groups = [...map.values()];
-  $('create').disabled = true;
-  $('create').textContent = 'Creating...';
-  $('progressPanel').hidden = false;
-  lastImportResults = [];
-  let completed = 0, imported = 0, failed = 0, skipped = 0;
-  const total = valid.length, started = Date.now();
-  const update = (text, chunk, chunks) => {
-    const pct = Math.round(completed / total * 100), elapsed = Math.max(1, (Date.now() - started) / 1000), rate = completed / elapsed, remain = rate ? Math.ceil((total - completed) / rate / 60) : null;
-    $('progressText').textContent = text;
-    $('progressPercent').textContent = `${pct}%`;
-    $('progressBar').style.width = `${pct}%`;
-    $('progressDetail').textContent = `${completed}/${total} rows | Chunk ${chunk}/${chunks} | Imported ${imported} | Failed ${failed} | Skipped ${skipped}${remain === null ? '' : ` | About ${Math.max(1, remain)} min remaining`}`;
-  };
-  const totalChunks = groups.reduce((n, g) => n + Math.ceil(g.rows.length / 10), 0);
-  let chunkNumber = 0;
-  update('Starting import...', 0, totalChunks);
-  for (const group of groups) {
-    let startResult;
-    try {
-      startResult = await api(`/api/projects/${group.projectId}/import/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: group.rows }) });
-    } catch (error) {
-      failed += group.rows.length; completed += group.rows.length;
-      lastImportResults.push({ ok: false, project: group.project, expenseName: group.expenseName, rows: group.rows.map(r => r.displayRowNumber).join(','), error: error.message });
-      update(`Failed ${group.expenseName}`, chunkNumber, totalChunks); continue;
-    }
-    if (startResult.skipped) {
-      skipped += group.rows.length; completed += group.rows.length;
-      lastImportResults.push({ ok: true, project: group.project, expenseName: group.expenseName, rows: group.rows.map(r => r.displayRowNumber).join(','), result: startResult });
-      update(`Skipped ${group.expenseName}`, chunkNumber, totalChunks); continue;
-    }
-    const expenseId = startResult.expenseId, chunks = [];
-    for (let i = 0; i < group.rows.length; i += 10) chunks.push(group.rows.slice(i, i + 10));
-    let groupFailed = false;
-    for (let i = 0; i < chunks.length; i++) {
-      chunkNumber++;
-      update(`Creating ${group.expenseName}`, chunkNumber, totalChunks);
-      try {
-        const result = await api(`/api/projects/${group.projectId}/import/${expenseId}/items`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: chunks[i] }) });
-        imported += result.itemsCreated || chunks[i].length;
-        completed += chunks[i].length;
-        lastImportResults.push({ ok: true, project: group.project, expenseName: group.expenseName, rows: chunks[i].map(r => r.displayRowNumber).join(','), result: { ...result, expense: startResult.expense } });
-      } catch (error) {
-        failed += chunks[i].length; completed += chunks[i].length; groupFailed = true;
-        lastImportResults.push({ ok: false, project: group.project, expenseName: group.expenseName, rows: chunks[i].map(r => r.displayRowNumber).join(','), error: error.message, expenseId });
-      }
-      update(groupFailed ? `Chunk completed with errors` : `Chunk complete`, chunkNumber, totalChunks);
-    }
-    if (!groupFailed) {
-      try { await api(`/api/projects/${group.projectId}/import/${expenseId}/finalize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: group.rows[0].status || 'draft' }) }); }
-      catch (error) { lastImportResults.push({ ok: false, project: group.project, expenseName: group.expenseName, rows: '', error: `Finalize failed: ${error.message}`, expenseId }); }
-    }
+  $('create').disabled=true;$('create').textContent='Creating...';$('progressPanel').hidden=false;lastImportResults=[];
+  let done=0,imported=0,failed=0,skipped=0,parentDone=0;const total=valid.length,totalChunks=parents.reduce((n,p)=>n+Math.ceil(p.rows.length/10),0),started=Date.now();let chunkNo=0;
+  const update=(text)=>{const pct=Math.round(done/total*100),rate=done/Math.max(1,(Date.now()-started)/1000),mins=rate?Math.max(1,Math.ceil((total-done)/rate/60)):null;$('progressText').textContent=text;$('progressPercent').textContent=`${pct}%`;$('progressBar').style.width=`${pct}%`;$('progressDetail').textContent=`${done}/${total} rows | Parent ${parentDone+1}/${parents.length} | Chunk ${chunkNo}/${totalChunks} | Imported ${imported} | Failed ${failed} | Skipped ${skipped}${mins?` | About ${mins} min remaining`:''}`};
+  update('Starting split-parent import...');
+  for(const parent of parents){let begin;update(`Creating ${parent.parentName}`);try{begin=await api(`/api/projects/${parent.projectId}/import/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:parent.rows,parentName:parent.parentName,partNumber:parent.partNumber,totalParts:parent.totalParts})})}catch(e){failed+=parent.rows.length;done+=parent.rows.length;parentDone++;lastImportResults.push({ok:false,project:parent.project,expenseName:parent.parentName,originalExpenseName:parent.originalExpenseName,rows:parent.rows.map(x=>x.displayRowNumber).join(','),error:e.message});update(`Failed ${parent.parentName}`);continue}
+    if(begin.skipped){skipped+=parent.rows.length;done+=parent.rows.length;parentDone++;lastImportResults.push({ok:true,project:parent.project,expenseName:parent.parentName,originalExpenseName:parent.originalExpenseName,result:begin});update(`Skipped ${parent.parentName}`);continue}
+    let parentFailed=false;
+    for(let i=0;i<parent.rows.length;i+=10){const chunk=parent.rows.slice(i,i+10);chunkNo++;update(`Creating ${parent.parentName}`);try{const result=await api(`/api/projects/${parent.projectId}/import/${begin.expenseId}/items`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:chunk})});imported+=result.itemsCreated||chunk.length;lastImportResults.push({ok:true,project:parent.project,expenseName:parent.parentName,originalExpenseName:parent.originalExpenseName,partNumber:parent.partNumber,totalParts:parent.totalParts,rows:chunk.map(x=>x.displayRowNumber).join(','),expenseId:begin.expenseId,result})}catch(e){failed+=chunk.length;parentFailed=true;lastImportResults.push({ok:false,project:parent.project,expenseName:parent.parentName,originalExpenseName:parent.originalExpenseName,partNumber:parent.partNumber,totalParts:parent.totalParts,rows:chunk.map(x=>x.displayRowNumber).join(','),expenseId:begin.expenseId,error:e.message})}done+=chunk.length;update(parentFailed?'Chunk completed with errors':'Chunk complete')}
+    const requested=String(parent.rows[0].status||'draft').toLowerCase();if(!parentFailed){update(`Finalising ${parent.parentName} as ${requested}`);try{const finalResult=await api(`/api/projects/${parent.projectId}/import/${begin.expenseId}/finalize`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:requested})});lastImportResults.push({ok:true,project:parent.project,expenseName:parent.parentName,originalExpenseName:parent.originalExpenseName,partNumber:parent.partNumber,totalParts:parent.totalParts,expenseId:begin.expenseId,result:finalResult});update(`${parent.parentName} status: ${finalResult.finalStatus}`)}catch(e){lastImportResults.push({ok:false,project:parent.project,expenseName:parent.parentName,originalExpenseName:parent.originalExpenseName,partNumber:parent.partNumber,totalParts:parent.totalParts,expenseId:begin.expenseId,error:`Items complete, status action required: ${e.message}`});setActionStatus(`Items created for ${parent.parentName}, but Autodesk blocked ${requested}. Check Forma workflow.`,true)}}else lastImportResults.push({ok:false,project:parent.project,expenseName:parent.parentName,originalExpenseName:parent.originalExpenseName,partNumber:parent.partNumber,totalParts:parent.totalParts,expenseId:begin.expenseId,error:'Parent remains Draft because one or more item chunks failed.'});
+    parentDone++;update(`Completed ${parent.parentName}`)
   }
-  update('Import complete', totalChunks, totalChunks);
-  $('log').value = JSON.stringify({ maximumRows: 1200, itemChunkSize: 10, costSpacingMs: 650, imported, failed, skipped, results: lastImportResults }, null, 2);
-  $('create').disabled = false;
-  $('create').textContent = 'Create expenses';
+  $('progressText').textContent='Import complete';$('progressPercent').textContent='100%';$('progressBar').style.width='100%';$('progressDetail').textContent=`${done}/${total} rows | ${parents.length} parent expense(s) | Imported ${imported} | Failed ${failed} | Skipped ${skipped}`;
+  $('log').value=JSON.stringify({maximumRows:1200,maximumItemsPerParent:300,itemChunkSize:10,costSpacingMs:130,parentExpensesCreated:parents.length,imported,failed,skipped,results:lastImportResults},null,2);$('create').disabled=false;$('create').textContent='Create expenses'
 };
-$('exportReport').onclick=async()=>{if(!lastImportResults.length)return setActionStatus('Run Create before exporting.',true);const r=await fetch('/api/export-import-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({results:lastImportResults})});if(!r.ok)return setActionStatus('Report export failed.',true);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Workday Forma Import Report.xlsx';a.click();URL.revokeObjectURL(url)};
+$('exportReport').onclick=async()=>{const r=await fetch('/api/export-import-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({results:lastImportResults})});if(!r.ok)return;const b=await r.blob(),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='Workday Forma Import Report.xlsx';a.click();URL.revokeObjectURL(u)};
 
 init().catch((error) => setActionStatus(error.message, true));
