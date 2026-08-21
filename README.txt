@@ -1,12 +1,12 @@
-Forma Workday Expense Solution v84 - Project-Aware Budget Dropdown
+Forma Workday Expense Solution v87 - Reliable Import
 
-Replace these files in the project root:
-- server.js
-- package.json
-- src/xlsx.js
-
-Budget dropdown values now show the project name first, for example:
-Ashkan Sandbox | 1000 - Site Establishment
-Holiday Park Upgrade | 1000 - Site Establishment
-
-The parser accepts both the new project-prefixed labels and older labels without the project name. costApi.js is included as an unchanged reference file and does not need to replace src/cost.js.
+Best solution for Failed to fetch and Autodesk quota issues:
+- 5 rows per short browser/server chunk
+- Maximum 5 active item requests
+- 3 server-side retries per item, 3 seconds apart
+- Up to 3 browser retry rounds for structured failed rows only
+- Successful row results are retained individually
+- A lost connection is marked Unknown and is not blindly resubmitted, preventing duplicate expense items
+- Maximum 300 items per Autodesk parent with automatic Part splitting
+- Project names remain visible in Budget and Purchase Order dropdowns
+- Cancel, timer, report export, negative values, supplier/PO logic, and Paid/Approved finalisation retained
