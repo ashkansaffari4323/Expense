@@ -1,14 +1,18 @@
-Forma Workday Expense Solution v76 - Four Concurrent Workers
+Forma Workday Expense Solution v78 - 100 Row Chunks
 
-Requested speed profile:
-- Four concurrent Autodesk Expense Item workers
+Corrected chunk structure:
+- Up to 100 Excel rows per browser/server chunk
+- Ten concurrent Autodesk item workers inside each chunk
 - Zero artificial delay between item requests
-- Zero artificial delay between 20-item chunks
-- Twenty items per short browser/server request
-- Retry-After remains enabled for actual Autodesk 429 responses
-- Six retries remain enabled for 429 and temporary 5xx errors
+- Zero artificial delay between chunks
+- Ten retry attempts for 429 and temporary 5xx responses
+- Autodesk Retry-After remains mandatory when supplied
 - Maximum 300 items per Autodesk parent
-- Automatic Part parent splitting for Expense Names above 300 items
-- Cancel button, progress, elapsed timer, report export, negative values, supplier/PO logic, and Paid/Approved finalisation retained
+- Automatic Part parent splitting above 300 items
 
-Target for 1,200 rows: approximately 4 to 7 minutes when Autodesk response time remains stable. A 429 Retry-After pause can increase total duration.
+For 1,050 rows under one logical Expense Name:
+- Four Autodesk parent Parts: 300 + 300 + 300 + 150
+- Eleven browser/server chunks total: 3 + 3 + 3 + 2
+- Autodesk still receives one Expense Item POST for each row
+
+Cancel, timer, progress, report export, negative values, supplier/PO logic, and Paid/Approved finalisation remain included.
