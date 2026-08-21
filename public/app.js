@@ -149,79 +149,73 @@ $('clearPreview').onclick = () => {
 $('clearApi').onclick = () => { $('log').value = 'No API result yet.'; };
 $('create').onclick = async () => {
   if ($('create').disabled) return;
-  const validRows = rows.filter((row) => row.selectionValid && !row.existsInCost);
-  if (!validRows.length) return setActionStatus('There are no valid rows to create.', true);
-  if (validRows.length > 1200) return setActionStatus('Maximum 1,200 valid rows per import.', true);
-  const groupsMap = new Map();
-  for (const row of validRows) {
+  const valid = rows.filter((row) => row.selectionValid && !row.existsInCost);
+  if (!valid.length) return setActionStatus('There are no valid rows to create.', true);
+  if (valid.length > 1200) return setActionStatus('Maximum 1,200 valid rows.', true);
+  const map = new Map();
+  for (const row of valid) {
     const key = `${row.projectId}|${row.expenseName.toLowerCase()}`;
-    if (!groupsMap.has(key)) groupsMap.set(key, { projectId: row.projectId, project: row.projectName, expenseName: row.expenseName, rows: [] });
-    groupsMap.get(key).rows.push(row);
+    if (!map.has(key)) map.set(key, { projectId: row.projectId, project: row.projectName, expenseName: row.expenseName, rows: [] });
+    map.get(key).rows.push(row);
   }
-  const groups = [...groupsMap.values()];
-  const batches = [];
-  let batch = [], batchRows = 0;
-  for (const group of groups) {
-    if (batch.length && batchRows + group.rows.length > 200) { batches.push(batch); batch = []; batchRows = 0; }
-    batch.push(group); batchRows += group.rows.length;
-  }
-  if (batch.length) batches.push(batch);
+  const groups = [...map.values()];
   $('create').disabled = true;
   $('create').textContent = 'Creating...';
   $('progressPanel').hidden = false;
   lastImportResults = [];
-  const startedAt = Date.now();
-  let completedRows = 0;
-  const totalRows = validRows.length;
-  const updateProgress = (status, batchNumber) => {
-    const percent = totalRows ? Math.round((completedRows / totalRows) * 100) : 100;
-    const elapsedSeconds = Math.max(1, (Date.now() - startedAt) / 1000);
-    const rowsPerSecond = completedRows / elapsedSeconds;
-    const remainingSeconds = rowsPerSecond > 0 ? Math.round((totalRows - completedRows) / rowsPerSecond) : null;
-    $('progressText').textContent = status;
-    $('progressPercent').textContent = `${percent}%`;
-    $('progressBar').style.width = `${percent}%`;
-    $('progressDetail').textContent = `${completedRows} of ${totalRows} rows processed | Batch ${batchNumber} of ${batches.length}${remainingSeconds === null ? '' : ` | About ${Math.ceil(remainingSeconds / 60)} minute(s) remaining`}`;
+  let completed = 0, imported = 0, failed = 0, skipped = 0;
+  const total = valid.length, started = Date.now();
+  const update = (text, chunk, chunks) => {
+    const pct = Math.round(completed / total * 100), elapsed = Math.max(1, (Date.now() - started) / 1000), rate = completed / elapsed, remain = rate ? Math.ceil((total - completed) / rate / 60) : null;
+    $('progressText').textContent = text;
+    $('progressPercent').textContent = `${pct}%`;
+    $('progressBar').style.width = `${pct}%`;
+    $('progressDetail').textContent = `${completed}/${total} rows | Chunk ${chunk}/${chunks} | Imported ${imported} | Failed ${failed} | Skipped ${skipped}${remain === null ? '' : ` | About ${Math.max(1, remain)} min remaining`}`;
   };
-  updateProgress('Starting import...', 1);
-  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-    const currentBatch = batches[batchIndex];
-    for (const group of currentBatch) {
-      updateProgress(`Creating ${group.expenseName}`, batchIndex + 1);
-      try {
-        const result = await api(`/api/projects/${group.projectId}/expense-groups`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: group.rows }) });
-        lastImportResults.push({ ok: !result.error, project: group.project, expenseName: group.expenseName, rows: group.rows.map((row) => row.displayRowNumber).join(','), result });
-      } catch (error) {
-        lastImportResults.push({ ok: false, project: group.project, expenseName: group.expenseName, rows: group.rows.map((row) => row.displayRowNumber).join(','), error: error.message });
-      }
-      completedRows += group.rows.length;
-      updateProgress(`Completed ${group.expenseName}`, batchIndex + 1);
+  const totalChunks = groups.reduce((n, g) => n + Math.ceil(g.rows.length / 10), 0);
+  let chunkNumber = 0;
+  update('Starting import...', 0, totalChunks);
+  for (const group of groups) {
+    let startResult;
+    try {
+      startResult = await api(`/api/projects/${group.projectId}/import/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: group.rows }) });
+    } catch (error) {
+      failed += group.rows.length; completed += group.rows.length;
+      lastImportResults.push({ ok: false, project: group.project, expenseName: group.expenseName, rows: group.rows.map(r => r.displayRowNumber).join(','), error: error.message });
+      update(`Failed ${group.expenseName}`, chunkNumber, totalChunks); continue;
     }
-    if (batchIndex < batches.length - 1) {
-      for (let remaining = 45; remaining > 0; remaining--) {
-        $('progressText').textContent = `Cooling down before batch ${batchIndex + 2}`;
-        $('progressDetail').textContent = `${completedRows} of ${totalRows} rows processed | Next batch in ${remaining} seconds`;
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (startResult.skipped) {
+      skipped += group.rows.length; completed += group.rows.length;
+      lastImportResults.push({ ok: true, project: group.project, expenseName: group.expenseName, rows: group.rows.map(r => r.displayRowNumber).join(','), result: startResult });
+      update(`Skipped ${group.expenseName}`, chunkNumber, totalChunks); continue;
+    }
+    const expenseId = startResult.expenseId, chunks = [];
+    for (let i = 0; i < group.rows.length; i += 10) chunks.push(group.rows.slice(i, i + 10));
+    let groupFailed = false;
+    for (let i = 0; i < chunks.length; i++) {
+      chunkNumber++;
+      update(`Creating ${group.expenseName}`, chunkNumber, totalChunks);
+      try {
+        const result = await api(`/api/projects/${group.projectId}/import/${expenseId}/items`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: chunks[i] }) });
+        imported += result.itemsCreated || chunks[i].length;
+        completed += chunks[i].length;
+        lastImportResults.push({ ok: true, project: group.project, expenseName: group.expenseName, rows: chunks[i].map(r => r.displayRowNumber).join(','), result: { ...result, expense: startResult.expense } });
+      } catch (error) {
+        failed += chunks[i].length; completed += chunks[i].length; groupFailed = true;
+        lastImportResults.push({ ok: false, project: group.project, expenseName: group.expenseName, rows: chunks[i].map(r => r.displayRowNumber).join(','), error: error.message, expenseId });
       }
+      update(groupFailed ? `Chunk completed with errors` : `Chunk complete`, chunkNumber, totalChunks);
+    }
+    if (!groupFailed) {
+      try { await api(`/api/projects/${group.projectId}/import/${expenseId}/finalize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: group.rows[0].status || 'draft' }) }); }
+      catch (error) { lastImportResults.push({ ok: false, project: group.project, expenseName: group.expenseName, rows: '', error: `Finalize failed: ${error.message}`, expenseId }); }
     }
   }
-  updateProgress('Import complete', batches.length);
-  $('log').value = JSON.stringify({ maximumRows: 1200, batchSize: 200, concurrency: 1, itemSpacingSeconds: 2, batchPauseSeconds: 45, results: lastImportResults }, null, 2);
+  update('Import complete', totalChunks, totalChunks);
+  $('log').value = JSON.stringify({ maximumRows: 1200, itemChunkSize: 10, costSpacingMs: 650, imported, failed, skipped, results: lastImportResults }, null, 2);
   $('create').disabled = false;
   $('create').textContent = 'Create expenses';
 };
-
-$('exportReport').onclick = async () => {
-  if (!lastImportResults.length) return setActionStatus('Run Create before exporting the report.', true);
-  const response = await fetch('/api/export-import-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ results: lastImportResults }) });
-  if (!response.ok) return setActionStatus('Could not export the import report.', true);
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'Workday Forma Import Report.xlsx';
-  link.click();
-  URL.revokeObjectURL(url);
-};
+$('exportReport').onclick=async()=>{if(!lastImportResults.length)return setActionStatus('Run Create before exporting.',true);const r=await fetch('/api/export-import-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({results:lastImportResults})});if(!r.ok)return setActionStatus('Report export failed.',true);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Workday Forma Import Report.xlsx';a.click();URL.revokeObjectURL(url)};
 
 init().catch((error) => setActionStatus(error.message, true));

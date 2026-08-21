@@ -1,25 +1,10 @@
-Forma Workday Expense Solution v64 - Root Replacement Package
+Forma Workday Expense Solution v66 - Chunked Import
 
-Copy the contents of this ZIP directly into your application root and choose Replace when prompted.
-
-Included root structure:
-- server.js
-- package.json
-- src/aps.js
-- src/cost.js
-- src/xlsx.js
-- src/templates.js
-- public/app.js
-- public/index.html
-- public/style.css
-
-Features:
-- Maximum 1,200 Excel rows
-- 200-row internal batches
-- Sequential group processing
-- Cost API throttling and Retry-After support
-- 45-second pause between batches
-- Error-only Preview
-- Live progress percentage and estimated time
-- Excel import report export
-- Negative quantity, unit price and amount preserved
+- One parent is created once.
+- Line items are sent in chunks of 10, preventing one long Vercel request.
+- 650ms global Cost API spacing.
+- Retry-After and six retries retained.
+- 1,200-row maximum.
+- Progress updates after each 10-item chunk.
+- Intended 1,050-row duration: approximately 12-20 minutes without heavy throttling.
+- Failed chunks are listed in the report without recreating successful chunks.
