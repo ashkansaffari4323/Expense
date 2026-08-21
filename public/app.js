@@ -2,6 +2,7 @@ const $ = (id) => document.getElementById(id);
 const selected = new Set();
 let projects = [];
 let rows = [];
+let lastImportResults = [];
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -148,25 +149,79 @@ $('clearPreview').onclick = () => {
 $('clearApi').onclick = () => { $('log').value = 'No API result yet.'; };
 $('create').onclick = async () => {
   if ($('create').disabled) return;
+  const validRows = rows.filter((row) => row.selectionValid && !row.existsInCost);
+  if (!validRows.length) return setActionStatus('There are no valid rows to create.', true);
+  if (validRows.length > 1200) return setActionStatus('Maximum 1,200 valid rows per import.', true);
+  const groupsMap = new Map();
+  for (const row of validRows) {
+    const key = `${row.projectId}|${row.expenseName.toLowerCase()}`;
+    if (!groupsMap.has(key)) groupsMap.set(key, { projectId: row.projectId, project: row.projectName, expenseName: row.expenseName, rows: [] });
+    groupsMap.get(key).rows.push(row);
+  }
+  const groups = [...groupsMap.values()];
+  const batches = [];
+  let batch = [], batchRows = 0;
+  for (const group of groups) {
+    if (batch.length && batchRows + group.rows.length > 200) { batches.push(batch); batch = []; batchRows = 0; }
+    batch.push(group); batchRows += group.rows.length;
+  }
+  if (batch.length) batches.push(batch);
   $('create').disabled = true;
   $('create').textContent = 'Creating...';
-  const groups = new Map();
-  for (const row of rows.filter((item) => item.selectionValid && !item.existsInCost)) {
-    const key = `${row.projectId}|${row.expenseName.toLowerCase()}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(row);
-  }
-  const output = [];
-  for (const group of groups.values()) {
-    try {
-      output.push(await api(`/api/projects/${group[0].projectId}/expense-groups`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: group }) }));
-    } catch (error) {
-      output.push({ error: error.message });
+  $('progressPanel').hidden = false;
+  lastImportResults = [];
+  const startedAt = Date.now();
+  let completedRows = 0;
+  const totalRows = validRows.length;
+  const updateProgress = (status, batchNumber) => {
+    const percent = totalRows ? Math.round((completedRows / totalRows) * 100) : 100;
+    const elapsedSeconds = Math.max(1, (Date.now() - startedAt) / 1000);
+    const rowsPerSecond = completedRows / elapsedSeconds;
+    const remainingSeconds = rowsPerSecond > 0 ? Math.round((totalRows - completedRows) / rowsPerSecond) : null;
+    $('progressText').textContent = status;
+    $('progressPercent').textContent = `${percent}%`;
+    $('progressBar').style.width = `${percent}%`;
+    $('progressDetail').textContent = `${completedRows} of ${totalRows} rows processed | Batch ${batchNumber} of ${batches.length}${remainingSeconds === null ? '' : ` | About ${Math.ceil(remainingSeconds / 60)} minute(s) remaining`}`;
+  };
+  updateProgress('Starting import...', 1);
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    const currentBatch = batches[batchIndex];
+    for (const group of currentBatch) {
+      updateProgress(`Creating ${group.expenseName}`, batchIndex + 1);
+      try {
+        const result = await api(`/api/projects/${group.projectId}/expense-groups`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: group.rows }) });
+        lastImportResults.push({ ok: !result.error, project: group.project, expenseName: group.expenseName, rows: group.rows.map((row) => row.displayRowNumber).join(','), result });
+      } catch (error) {
+        lastImportResults.push({ ok: false, project: group.project, expenseName: group.expenseName, rows: group.rows.map((row) => row.displayRowNumber).join(','), error: error.message });
+      }
+      completedRows += group.rows.length;
+      updateProgress(`Completed ${group.expenseName}`, batchIndex + 1);
+    }
+    if (batchIndex < batches.length - 1) {
+      for (let remaining = 45; remaining > 0; remaining--) {
+        $('progressText').textContent = `Cooling down before batch ${batchIndex + 2}`;
+        $('progressDetail').textContent = `${completedRows} of ${totalRows} rows processed | Next batch in ${remaining} seconds`;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     }
   }
-  $('log').value = JSON.stringify(output, null, 2);
+  updateProgress('Import complete', batches.length);
+  $('log').value = JSON.stringify({ maximumRows: 1200, batchSize: 200, concurrency: 1, itemSpacingSeconds: 2, batchPauseSeconds: 45, results: lastImportResults }, null, 2);
   $('create').disabled = false;
   $('create').textContent = 'Create expenses';
+};
+
+$('exportReport').onclick = async () => {
+  if (!lastImportResults.length) return setActionStatus('Run Create before exporting the report.', true);
+  const response = await fetch('/api/export-import-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ results: lastImportResults }) });
+  if (!response.ok) return setActionStatus('Could not export the import report.', true);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'Workday Forma Import Report.xlsx';
+  link.click();
+  URL.revokeObjectURL(url);
 };
 
 init().catch((error) => setActionStatus(error.message, true));
