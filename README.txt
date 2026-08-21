@@ -1,20 +1,16 @@
-Forma Workday Expense Solution v71 - Double Speed Adaptive Import
+Forma Workday Expense Solution v72 - Maximum Speed Profile
 
-Speed changes from v70:
-- Initial adaptive workers: 3 to 4
-- Global Cost request start spacing: 250ms to 125ms
-- Pause between 10-item chunks: 500ms to 250ms
-- Recovery after a 429 increases workers faster after successful requests
+Five-times shorter fixed gaps than v71:
+- Cost request-start spacing: 125ms to 25ms
+- Pause between 10-item chunks: 250ms to 50ms
+- Worker recovery after throttling: 5x faster
+- Initial worker cap remains 4 to avoid uncontrolled request fan-out
 
-Safety retained:
-- Automatic fallback to one worker after Autodesk 429
-- Retry-After plus safety buffer
-- Six retries for 429 and temporary 5xx errors
-- Maximum 300 items per Autodesk parent
-- Automatic Part parent splitting
-- Ten items per short browser/server chunk
-- Live progress and elapsed timer
-- Paid/Approved finalisation and workflow reporting
-- Error-only Preview and Excel report export
+Adaptive safety remains enabled:
+- Autodesk 429 immediately reduces concurrency to one worker
+- All Cost requests pause for Retry-After plus the safety buffer
+- Six retries remain enabled for 429 and temporary 5xx responses
+- Maximum 300 items per parent and automatic Part splitting remain enabled
+- Ten items per short request, live progress, elapsed time, report export, negative values, and Paid/Approved finalisation remain enabled
 
-Expected 1,050-row duration is approximately 4 to 10 minutes without heavy Autodesk throttling. Autodesk Retry-After can increase the duration.
+Important: this is an aggressive profile. It may finish faster when Autodesk has capacity, but may trigger 429 sooner. When 429 occurs, Autodesk controls the final duration through Retry-After.
