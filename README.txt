@@ -1,23 +1,24 @@
-Forma Workday Expense v98 - Global Pending Queue
+Forma Workday Expense v99 - Fast Forward and Global Pending Queue
 
-Install order:
-1. Install v96.
-2. Install v97.
-3. Extract install-v98.cmd and apply-v98.js into the project root.
-4. Double-click install-v98.cmd.
+Install:
+1. Extract install-v99.cmd and apply-v99.js.
+2. Copy both into the Forma Expense project root.
+3. Double-click install-v99.cmd.
 
-Smart workflow:
-- Process each parent forward once with adaptive workers.
-- Example: if 298 of 300 succeed, queue only the missing 2 and immediately continue to the next 300-item parent.
-- Continue through every parent and every selected project without waiting for individual pending items.
-- After the full forward pass finishes, wait 25 seconds.
-- Group pending rows by parent and retry only confirmed-missing rows.
-- Repeat global pending rounds every 25 seconds until all temporary failures succeed or Cancel is clicked.
-- Successful rows are never retried.
-- Duplicate verification and deterministic identifiers from v96 remain active.
-- Permanent validation and permission errors are reported, not retried forever.
-- Parent status finalisation occurs after the global pending queue is empty and all expected items are confirmed.
-- Adaptive worker control from v97 remains active.
-- Automatic login and Excel-template features are unchanged.
+Exact method:
+- Only fixed structural split is Autodesk's 300-item parent limit.
+- Each parent sends all expected rows in one request with 10 workers.
+- Normal API request gap is 0 ms.
+- No successful batch wait and no parent wait during the forward pass.
+- If 298 of 300 succeed, only the missing 2 enter Pending.
+- Immediately continue to the next 300-item parent and then every selected project.
+- After all forward parents finish, wait 10 seconds.
+- Retry only pending items, grouped by their parent.
+- Repeat every 10 seconds until the temporary pending queue is empty or Cancel is clicked.
+- Confirmed successes are never retried.
+- Deterministic externalId values and existing-item lookup reduce duplicate risk after lost responses.
+- Permanent validation and permission errors are reported and excluded from endless retries.
+- Parent status finalises only after all expected items are confirmed.
+- Automatic login and the current Excel template remain unchanged.
 
 Timestamped backups are created before modification.
