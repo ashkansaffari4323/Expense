@@ -1,23 +1,20 @@
-Forma Workday Expense v91 - Linear Retry Schedule
+Forma Workday Expense v92
 
-Copy the src folder into the application root and replace src/aps.js.
+1. Extract install-v92.cmd and apply-v92.js.
+2. Copy both files into the Forma Expense project root.
+3. Double-click install-v92.cmd.
 
-Unchanged normal speed:
-- 10 concurrent workers
-- 0 ms normal request spacing
-- No successful-call delay
+v92 behavior:
+- One browser/server batch per generated parent, up to 300 rows
+- 10 concurrent Autodesk item workers
+- 0 ms normal API-call gap
+- Complete one 300-item parent before starting the next
+- Wait 10 seconds after a successful parent before the next parent
+- Complete all parents for one project before the next project
+- Wait 25 seconds between projects
+- Retry rejected calls after 10, 20, 30, 40, 50, 60, 70, 80, 90 and 100 seconds
+- Maximum 10 retry attempts
+- Existing Excel template file is not changed
+- Existing project selection and Hub Admin changes remain in place
 
-Retry schedule for HTTP 429, 500, 502, 503 and 504:
-- Retry 1: wait 10 seconds
-- Retry 2: wait 20 seconds
-- Retry 3: wait 30 seconds
-- Retry 4: wait 40 seconds
-- Retry 5: wait 50 seconds
-- Retry 6: wait 60 seconds
-- Retry 7: wait 70 seconds
-- Retry 8: wait 80 seconds
-- Retry 9: wait 90 seconds
-- Retry 10: wait 100 seconds
-
-This file ignores Retry-After and uses the fixed linear schedule requested.
-No Excel template, project selection, chunk size, parent splitting or UI file is changed.
+The installer creates timestamped backups of server.js, public/app.js, src/aps.js and package.json.
