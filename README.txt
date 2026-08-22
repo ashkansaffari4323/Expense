@@ -1,23 +1,23 @@
-Forma Workday Expense v95 - 250 Row Batches with 15-Second Wait
+Forma Workday Expense v96 - Resilient Failed-Item Queue
 
 Install:
-1. Extract install-v95.cmd and apply-v95.js.
-2. Copy both files into the Forma Expense project root.
-3. Double-click install-v95.cmd.
+1. Extract install-v96.cmd and apply-v96.js.
+2. Copy both into the Forma Expense project root.
+3. Double-click install-v96.cmd.
 
-Settings:
-- Autodesk parent maximum: 300 items
-- Browser/server batch size: 250 rows
-- A full parent is processed as 250 + 50
-- Concurrent workers: 10
-- Normal API request gap: 0 ms
-- Wait between successful batches: 15 seconds
-- Wait between successful parents in the same project: 15 seconds
-- Wait between projects: 25 seconds
-- Retry waits: 10, 20, 30 ... 250 seconds
-- Maximum retries: 25
-- Projects processed sequentially
-- Maximum selected projects: 10
+Behavior:
+- Maximum 300 items per Autodesk parent
+- 300 rows submitted per parent batch
+- 10 workers and 0 ms normal gap
+- If an item fails temporarily, keep moving forward
+- Successful items are removed from the queue
+- Permanent validation/permission errors are reported and not endlessly retried
+- After the forward pass, wait 30 seconds
+- Retry only temporary failed items
+- Repeat every 30 seconds until all temporary items succeed or Cancel is clicked
+- Deterministic externalId values verify existing items before retry, reducing duplicate risk after a lost response
+- Parent status finalises only after its item queue is empty and there are no permanent item errors
+- Projects remain sequential
 - Automatic Autodesk sign-in remains enabled
 - Existing Excel template is not modified
 
