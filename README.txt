@@ -1,28 +1,27 @@
-Forma Workday Expense v102 - Working Rate-Safe Forward Queue
+Forma Workday Expense v103 - Stable v98-Style Forward Import
 
-This version fixes both problems introduced after v98:
-- No incomplete reserveItemPost function
-- No 300-row, 16-minute browser/server request
+This release deliberately removes the broken v100-v102 scheduler and restores the v98-style method that created items.
 
 Install:
-1. Extract install-v102.cmd and apply-v102.js.
-2. Copy both files into the Forma Expense project root.
-3. Double-click install-v102.cmd.
+1. Extract install-v103.cmd and apply-v103.js.
+2. Copy both into the Forma Expense project root.
+3. Double-click install-v103.cmd.
 
-Final design:
-- Autodesk parent split remains 300 items
-- Browser/server request size is 10 rows
-- Two response-latency workers
-- Expense Item POST starts are globally spaced by 3,200 ms
-- Effective target is 18.75 item POST starts/minute, below the documented 20/minute endpoint limit
-- Each short request returns approximately every 32 seconds, so progress updates regularly
-- Temporary failures go to one global Pending queue
-- Forward pass continues through all parents and selected projects
-- After the forward pass, wait 30 seconds and retry confirmed-missing Pending items in 10-row requests
+Behavior:
+- Maximum 300 items per Autodesk parent
+- One forward request per parent, up to 300 rows
+- Ten item workers
+- Zero artificial request gap
+- No reserveItemPost function or scheduler dependency
+- Temporary failures enter the global Pending queue
+- If 298 of 300 succeed, only the missing 2 remain Pending and processing moves immediately to the next parent
+- After every parent/project forward pass completes, wait 25 seconds and retry only Pending items
 - Repeat until Pending is empty or Cancel is clicked
-- Successful items are not resubmitted
-- Duplicate verification remains based on deterministic externalId plus existing-item lookup
-- Parent finalisation happens only after all expected items are confirmed
+- Successful items are never resubmitted
+- Deterministic externalId plus existing-item lookup provide duplicate protection
+- Permanent validation/permission errors are reported and excluded from endless retries
 - Automatic login and Excel-template features remain unchanged
 
-The installer builds changes in a temporary directory, syntax-validates every JavaScript file, and only then replaces project files. Timestamped backups are created.
+The installer builds in a temporary folder, validates all JavaScript files and package.json, then creates timestamped backups and replaces project files.
+
+Note: This restores the working fast method and can still encounter Autodesk 429 responses. Those responses are moved to Pending rather than stopping the forward pass.
