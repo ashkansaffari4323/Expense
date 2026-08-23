@@ -1,28 +1,17 @@
-Forma Workday Expense v100 - Endpoint Rate-Safe Import
+Forma Workday Expense v101 - reserveItemPost Fix
 
-Install on top of v96 or v99:
-1. Extract install-v100.cmd and apply-v100.js.
-2. Copy both files into the Forma Expense project root.
-3. Double-click install-v100.cmd.
+The error "reserveItemPost is not defined" came from an incomplete/broken src/aps.js deployment.
 
-Best settings for the documented Expense Item POST limit:
-- Autodesk parent maximum: 300 items
-- Forward-first global pending queue retained
-- Expense Item POST starts: one every 3,200 ms
-- Sustainable start rate: 18.75 requests/minute, below the documented 20/minute endpoint limit
-- Workers: 2, to hide response latency without allowing request bursts
-- Other Cost API endpoints are not slowed by the item limiter
-- If 429 occurs, all item starts share one cooldown gate
-- Cooldown: maximum of 30 seconds or Autodesk Retry-After
-- Temporary failures go to Pending and processing continues forward
-- After every parent/project forward pass, retry only confirmed-missing Pending items
-- Pending rounds: every 30 seconds until complete or Cancel
-- Successful items are never resubmitted
-- Deterministic externalId and existing-item lookup reduce duplicate risk
-- Automatic login and current Excel template are unchanged
+Use either method:
+A. Copy src/aps.js from this ZIP over your project root src/aps.js.
+B. Extract the ZIP into the project root and run install-v101.cmd.
 
-Expected endpoint-limited creation time:
-- 300 items: approximately 16 minutes
-- 1,200 items: approximately 64 minutes
+Behavior retained:
+- Expense Item POST starts every 3,200 ms
+- 18.75 item POST starts per minute
+- 2 workers
+- Shared 429 cooldown
+- Uses the greater of 30 seconds or Retry-After
+- Existing global pending queue remains in public/app.js
 
-Timestamped backups are created before modification.
+Important: This fixes the runtime error only. The existing API report may still say version v99 because that text is hardcoded in public/app.js. It does not mean the rate limiter failed after this replacement.
