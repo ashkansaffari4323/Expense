@@ -1,1 +1,1 @@
-v105 full root replacement. A clearly visible Expenses / Contracts tab bar is shown below the header. Contracts Excel import creates each contract then sets status to approved. The ZIP is flat: extract directly over the project root, not into a nested folder.
+v106 full root replacement. Contracts now has the same project workflow concept as Expenses: hub selection, project search, select all/clear all, load projects, template download, Excel upload, preview table, validation summary, create and auto-approve, and API results.
