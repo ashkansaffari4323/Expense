@@ -1,1 +1,1 @@
-v104 full replacement package. Contracts Excel import creates contracts and immediately PATCHes status to approved. Extract over the project root, run npm install, commit all files, and deploy. Existing Expense Import files are retained from the uploaded v103 baseline.
+v105 full root replacement. A clearly visible Expenses / Contracts tab bar is shown below the header. Contracts Excel import creates each contract then sets status to approved. The ZIP is flat: extract directly over the project root, not into a nested folder.
