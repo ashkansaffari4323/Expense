@@ -1,4 +1,4 @@
-require('dotenv').config();const express=require('express'),path=require('path'),multer=require('multer'),auth=require('./src/auth'),cost=require('./src/cost'),xlsx=require('./src/xlsx'),app=express(),upload=multer({storage:multer.memoryStorage()});app.use(express.json({limit:'10mb'}));app.use(express.static(path.join(__dirname,'public')));app.get('/api/version',(_,r)=>r.json({version:'v107',package:'1.0.107',supplierDropdown:'fast 2LO project/account companies plus contract suppliers',templatePerformance:'parallel calls with 2.5 second company timeout'}));app.get('/api/auth/login',(_,r)=>r.redirect(auth.loginUrl(auth.state())));app.get('/api/auth/callback',async(q,r)=>{try{if(!q.query.code||!auth.valid(q.query.state))throw Error('Invalid callback');const t=await auth.exchange(q.query.code);auth.set(r,{access_token:t.access_token,refresh_token:t.refresh_token,expires_at:Date.now()+t.expires_in*1000});r.redirect('/')}catch(e){r.status(500).send(e.message)}});app.get('/api/auth/status',(q,r)=>r.json({signedIn:!!auth.session(q)}));app.post('/api/auth/logout',(_,r)=>{auth.clear(r);r.json({ok:true})});app.get('/api/hubs',auth.ensure,async(q,r)=>{try{r.json((await cost.hubs(q.aps.access_token)).map(x=>({id:x.id,name:x.attributes?.name||x.id})))}catch(e){r.status(500).json({error:e.message})}});app.get('/api/hubs/:hub/projects',auth.ensure,async(q,r)=>{try{r.json(await allHubProjects(q.aps.access_token,q.params.hub))}catch(e){r.status(500).json({error:e.message})}});const stripAdminId=id=>String(id||'').replace(/^b\./,'');
+require('dotenv').config();const express=require('express'),path=require('path'),multer=require('multer'),auth=require('./src/auth'),cost=require('./src/cost'),xlsx=require('./src/xlsx'),app=express(),upload=multer({storage:multer.memoryStorage()});app.use(express.json({limit:'10mb'}));app.use(express.static(path.join(__dirname,'public')));app.get('/api/version',(_,r)=>r.json({version:'v108',package:'1.0.108',supplierDropdown:'fast 2LO project/account companies plus contract suppliers',templatePerformance:'parallel calls with 2.5 second company timeout'}));app.get('/api/auth/login',(_,r)=>r.redirect(auth.loginUrl(auth.state())));app.get('/api/auth/callback',async(q,r)=>{try{if(!q.query.code||!auth.valid(q.query.state))throw Error('Invalid callback');const t=await auth.exchange(q.query.code);auth.set(r,{access_token:t.access_token,refresh_token:t.refresh_token,expires_at:Date.now()+t.expires_in*1000});r.redirect('/')}catch(e){r.status(500).send(e.message)}});app.get('/api/auth/status',(q,r)=>r.json({signedIn:!!auth.session(q)}));app.post('/api/auth/logout',(_,r)=>{auth.clear(r);r.json({ok:true})});app.get('/api/hubs',auth.ensure,async(q,r)=>{try{r.json((await cost.hubs(q.aps.access_token)).map(x=>({id:x.id,name:x.attributes?.name||x.id})))}catch(e){r.status(500).json({error:e.message})}});app.get('/api/hubs/:hub/projects',auth.ensure,async(q,r)=>{try{r.json(await allHubProjects(q.aps.access_token,q.params.hub))}catch(e){r.status(500).json({error:e.message})}});const stripAdminId=id=>String(id||'').replace(/^b\./,'');
 async function adminProjectPage(token,accountId,region,offset){const url=`https://developer.api.autodesk.com/construction/admin/v1/accounts/${encodeURIComponent(accountId)}/projects?limit=200&offset=${offset}`;const response=await fetch(url,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json',Region:region}});if(!response.ok)throw Error(`${region}: ${response.status} ${await response.text()}`);return response.json()}
 async function adminProjects(token,hubId){const accountId=stripAdminId(hubId),preferred=String(process.env.APS_ADMIN_REGION||process.env.APS_COST_REGION||'AUS').toUpperCase(),regions=[...new Set([preferred,'AUS','US','EMEA'])];let lastError;for(const region of regions){try{const projects=[];let offset=0,total=1;while(offset<total){const data=await adminProjectPage(token,accountId,region,offset),rows=data.results||data.data||[];projects.push(...rows);const limit=Number(data.pagination?.limit||200);total=Number(data.pagination?.totalResults??(offset+rows.length));if(!rows.length)break;offset+=limit}return projects.map(p=>({id:stripAdminId(p.id||p.projectId),rawId:p.id||p.projectId,name:p.name||p.projectName||p.id,status:p.status||'',projectListSource:'hub-admin',adminRegion:region}))}catch(error){lastError=error}}throw lastError||Error('Hub Admin project list unavailable')}
 async function allHubProjects(token,hubId){let member=[];try{member=await cost.projects(token,hubId)}catch{}let admin=[];try{admin=await adminProjects(token,hubId)}catch(error){if(!member.length)throw error;return member}const map=new Map(admin.map(p=>[stripAdminId(p.id),p]));for(const p of member){const id=stripAdminId(p.id),current=map.get(id);map.set(id,{...(current||{}),...p,id,projectListSource:current?'hub-admin+member':'member-access'})}return [...map.values()].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')))}
@@ -17,8 +17,123 @@ const parent={name:f.expenseName,referenceNumber:f.referenceNumber||'',type:f.ty
 const expense=await cost.createExpense(q.aps.access_token,q.params.project,parent);const items=[];for(const x of rows){const itemPayload={budgetId:x.budgetId,name:x.itemName,description:`Supplier: ${groupSupplier}`,quantity:x.quantity,unit:x.unit||'ls',unitPrice:x.unitPrice,amount:x.amount,exchangeRate:1};if(x.contractId)itemPayload.contractId=x.contractId;if(x.referenceNumber){itemPayload.externalId=x.referenceNumber;itemPayload.externalSystem='ReferenceNumber'}const item=await cost.createItem(q.aps.access_token,q.params.project,expense.id,itemPayload);items.push({...item,supplierName:groupSupplier,sourceExcelRow:x.displayRowNumber})}
 let finalStatus='draft',statusResult=null;const requested=String(f.status||'draft').toLowerCase();try{if(requested==='approved'||requested==='paid'){await cost.updateExpense(q.aps.access_token,q.params.project,expense.id,{status:'approved'});finalStatus='approved'}if(requested==='paid'){await cost.updateExpense(q.aps.access_token,q.params.project,expense.id,{status:'paid'});finalStatus='paid'}statusResult={ok:true,requested,finalStatus}}catch(e){statusResult={ok:false,requested,finalStatus,error:e.message}}
 r.json({created:true,parentCreated:1,excelRowsReceived:rows.length,expenseItemsCreated:items.length,parentContractIdSent:false,noAutomaticPurchaseOrderItem:true,supplierName:resolvedSupplier,supplierId:groupSupplierId,supplierCompanyUid:groupSupplierCompanyUid,supplierSource:poSupplierNames.length?'Purchase Order':'Excel',purchaseOrderSuppliers:poSupplierNames,mixedPurchaseOrderSuppliersAllowed:poSupplierNames.length>1,finalStatus,statusResult,expense,expenseItems:items})}catch(e){r.status(500).json({error:e.message})}});app.post('/api/export-import-report',async(q,r)=>{try{const ExcelJS=require('exceljs'),wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Import Report');ws.addRow(['Project','Original Expense Name','Created Parent Name','Part','Excel Rows','Result','Expense ID','Items Created','Final Status','Error']);for(const x of q.body.results||[])ws.addRow([x.project||'',x.originalExpenseName||x.expenseName||'',x.expenseName||'',x.partNumber&&x.totalParts?`${x.partNumber} of ${x.totalParts}`:'',x.rows||'',x.ok?'Imported':'Error',x.expenseId||'',x.result?.itemsCreated||0,x.result?.finalStatus||'',x.error||x.result?.error||'']);ws.getRow(1).font={bold:true};const b=await wb.xlsx.writeBuffer();r.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');r.setHeader('Content-Disposition','attachment; filename=Workday Forma Import Report.xlsx');r.send(Buffer.from(b))}catch(e){r.status(500).json({error:e.message})}});
-const ctRead=async buf=>{const ExcelJS=require('exceljs'),wb=new ExcelJS.Workbook();await wb.xlsx.load(buf);const ws=wb.getWorksheet('Contracts')||wb.worksheets[0],h={};ws.getRow(1).eachCell((c,i)=>h[String(c.value||'').trim().toLowerCase()]=i);const v=(row,n)=>{const x=h[n]?row.getCell(h[n]).value:'';return x&&typeof x==='object'&&'result' in x?x.result:x};const rows=[];ws.eachRow((row,n)=>{if(n===1)return;const proj=String(v(row,'project')||v(row,'project id')||'').trim(),name=String(v(row,'contract name')||'').trim(),number=String(v(row,'contract number')||'').trim();if(!proj&&!name&&!number)return;const projectId=(proj.includes('|')?proj.split('|').pop():proj).trim().replace(/^b\./,''),projectName=proj.includes('|')?proj.split('|').slice(0,-1).join('|').trim():'';const amount=Number(v(row,'committed amount')||0),errors=[];if(!/^[0-9a-f-]{36}$/i.test(projectId))errors.push('Select a project from the dropdown');if(!name)errors.push('Contract Name required');if(!number)errors.push('Contract Number required');if(!Number.isFinite(amount)||amount<0)errors.push('Invalid amount');rows.push({row:n,projectId,projectName,name,number,description:String(v(row,'description')||'').trim(),companyId:String(v(row,'supplier company id')||'').trim(),amount,externalId:String(v(row,'external id')||'').trim()||number,errors})});return rows};
-app.post('/api/contracts/template',auth.ensure,async(q,r)=>{try{const ExcelJS=require('exceljs'),wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Contracts'),list=(q.body.projects||[]).map(p=>`${String(p.name).replace(/,/g,' ')} | ${p.id}`);ws.columns=[{header:'Project',key:'p',width:60},{header:'Contract Name',key:'n',width:34},{header:'Contract Number',key:'c',width:20},{header:'Description',key:'d',width:40},{header:'Supplier Company ID',key:'s',width:30},{header:'Committed Amount',key:'a',width:18},{header:'External ID',key:'e',width:22}];ws.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};ws.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0B57D0'}};ws.views=[{state:'frozen',ySplit:1}];const lk=wb.addWorksheet('Project Lookup');list.forEach((x,i)=>lk.getCell(`A${i+1}`).value=x);lk.state='veryHidden';for(let i=2;i<=1001;i++){if(list.length)ws.getCell(`A${i}`).dataValidation={type:'list',allowBlank:true,showErrorMessage:true,errorTitle:'Project',error:'Select a project from the list',formulae:[`'Project Lookup'!$A$1:$A$${list.length}`]};ws.getCell(`F${i}`).numFmt='#,##0.00'}if(list[0])ws.addRow({p:list[0],n:'Example Contract',c:'C-001',d:'Imported from Excel',a:1000,e:'C-001'});const b=await wb.xlsx.writeBuffer();r.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');r.setHeader('Content-Disposition','attachment; filename="Forma Contracts Import.xlsx"');r.send(Buffer.from(b))}catch(e){r.status(500).json({error:e.message})}});
-app.post('/api/contracts/preview',auth.ensure,upload.single('file'),async(q,r)=>{try{if(!q.file)throw Error('No file uploaded');const rows=await ctRead(q.file.buffer),cache={};for(const x of rows){if(x.errors.length)continue;try{cache[x.projectId]=cache[x.projectId]||await cost.contracts(q.aps.access_token,x.projectId);if(cache[x.projectId].some(c=>String(c.externalId||'')===x.externalId||String(c.number||c.code||'')===x.number))x.exists=true}catch(e){x.errors.push('No Cost access: '+String(e.message).slice(0,120))}}r.json({total:rows.length,valid:rows.filter(x=>!x.errors.length&&!x.exists).length,existing:rows.filter(x=>x.exists).length,invalid:rows.filter(x=>x.errors.length).length,rows})}catch(e){r.status(500).json({error:e.message})}});
-app.post('/api/contracts/import',auth.ensure,upload.single('file'),async(q,r)=>{try{if(!q.file)throw Error('No file uploaded');const rows=await ctRead(q.file.buffer),results=[],cache={};for(const x of rows){if(x.errors.length){results.push({ok:false,row:x.row,name:x.name,error:x.errors.join('; ')});continue}try{cache[x.projectId]=cache[x.projectId]||await cost.contracts(q.aps.access_token,x.projectId);const dup=cache[x.projectId].find(c=>String(c.externalId||'')===x.externalId||String(c.number||c.code||'')===x.number);if(dup){results.push({ok:true,skipped:true,row:x.row,name:x.name,contractId:dup.id,status:dup.status});continue}const payload={name:x.name,number:x.number,description:x.description,originalCommittedAmount:x.amount,externalSystem:'FormaExcelImport',externalId:x.externalId};if(x.companyId)payload.companyId=x.companyId;const c=await cost.createContract(q.aps.access_token,x.projectId,payload);cache[x.projectId].push(c);let status='approved';try{const u=await cost.updateContract(q.aps.access_token,x.projectId,c.id,{status:'approved'});status=(u&&u.status)||'approved'}catch(e){results.push({ok:false,row:x.row,name:x.name,contractId:c.id,error:'Created but approval failed: '+e.message});continue}results.push({ok:true,row:x.row,name:x.name,project:x.projectName,contractId:c.id,status})}catch(e){results.push({ok:false,row:x.row,name:x.name,error:e.message})}}r.json({version:'v107',total:results.length,created:results.filter(x=>x.ok&&!x.skipped).length,skipped:results.filter(x=>x.skipped).length,failed:results.filter(x=>!x.ok).length,results})}catch(e){r.status(500).json({error:e.message})}});
+// ===== v108 Contracts module =====
+const CT_COST='https://developer.api.autodesk.com/cost/v1';
+const ctAps=require('./src/aps');
+const ctPid=v=>String(v||'').trim().replace(/^b\./,'');
+const ctNorm=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
+async function ctCompanies(hubId,projectId){
+  // Companies on the project (with member_group_id) first, account directory as fallback.
+  let token;try{token=await appToken()}catch{return[]}
+  const acc=ctPid(hubId),prj=ctPid(projectId),out=new Map();
+  const grab=async base=>{let off=0;for(let i=0;i<20;i++){let page=[];try{page=await fetchCompanyPage(token,`${base}?limit=100&offset=${off}&sort=name`,8000)}catch{break}for(const c of page){const n=String(c.name||c.companyName||'').trim();if(n&&!out.has(ctNorm(n)))out.set(ctNorm(n),{name:n,companyUid:c.id||'',companyId:c.member_group_id||c.memberGroupId||''})}if(page.length<100)break;off+=100}};
+  await grab(`https://developer.api.autodesk.com/hq/v1/accounts/${acc}/projects/${prj}/companies`);
+  if(!out.size)await grab(`https://developer.api.autodesk.com/hq/v1/accounts/${acc}/companies`);
+  return[...out.values()].sort((a,b)=>a.name.localeCompare(b.name));
+}
+const ctDate=v=>{if(!v)return'';if(v instanceof Date)return isNaN(v)?'':v.toISOString();const s=String(v).trim();if(!s)return'';let m=s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);if(m)return new Date(Date.UTC(+m[3],+m[2]-1,+m[1])).toISOString();const d=new Date(s);return isNaN(d)?'invalid':d.toISOString()};
+async function ctRead(buf){
+  const ExcelJS=require('exceljs'),wb=new ExcelJS.Workbook();await wb.xlsx.load(buf);
+  const ws=wb.getWorksheet('Contracts')||wb.worksheets[0],meta=wb.getWorksheet('Meta'),hubId=meta?String(meta.getCell('A1').value||''):'';
+  const h={};ws.getRow(1).eachCell((c,i)=>h[ctNorm(c.value)]=i);
+  const v=(row,...names)=>{for(const n of names){const i=h[ctNorm(n)];if(!i)continue;let x=row.getCell(i).value;if(x&&typeof x==='object'&&!(x instanceof Date)){if('result' in x)x=x.result;else if('text' in x)x=x.text;else if(x.richText)x=x.richText.map(t=>t.text).join('')}if(x!==null&&x!==undefined&&x!=='')return x}return''};
+  const rows=[];
+  ws.eachRow((row,n)=>{if(n===1)return;
+    const proj=String(v(row,'Project')).trim(),name=String(v(row,'Contract Name')).trim(),code=String(v(row,'Contract Number')).trim();
+    if(!proj&&!name&&!code)return;
+    const projectId=ctPid(proj.includes('|')?proj.split('|').pop():proj),projectName=proj.includes('|')?proj.split('|').slice(0,-1).join('|').trim():proj;
+    const supRaw=String(v(row,'Supplier')).trim(),supplierName=supRaw.includes(' | ')?supRaw.split(' | ').slice(1).join(' | ').trim():supRaw;
+    const amount=Number(v(row,'Contract Value (ex GST)','Contract Value','Committed Amount')||0);
+    const applyGst=ctNorm(v(row,'Apply GST'))==='yes',gstRate=applyGst?Number(v(row,'GST %')||10):0;
+    const issued=ctDate(v(row,'Issued Date'));
+    const errors=[];
+    if(!/^[0-9a-f-]{36}$/i.test(projectId))errors.push('Select a project from the dropdown');
+    if(!name)errors.push('Contract Name required');
+    if(!code)errors.push('Contract Number required');
+    if(!supplierName)errors.push('Supplier required');
+    if(!Number.isFinite(amount)||amount<0)errors.push('Invalid contract value');
+    if(applyGst&&(!Number.isFinite(gstRate)||gstRate<0||gstRate>100))errors.push('Invalid GST %');
+    if(issued==='invalid')errors.push('Invalid Issued Date');
+    const gst=Math.round(amount*gstRate)/100;
+    rows.push({row:n,projectId,projectName,name,code,supplierName,description:String(v(row,'Description')).trim(),issuedAt:issued==='invalid'?'':issued,amount,applyGst,gstRate,gst,total:Math.round((amount+gst)*100)/100,errors});
+  });
+  return{hubId,rows};
+}
+async function ctCheck(q,data){
+  const cache={};
+  for(const x of data.rows){
+    if(x.errors.length)continue;
+    try{
+      if(!cache[x.projectId])cache[x.projectId]={contracts:await cost.contracts(q.aps.access_token,x.projectId),companies:await ctCompanies(data.hubId,x.projectId)};
+      const c=cache[x.projectId];
+      const sup=c.companies.find(s=>ctNorm(s.name)===ctNorm(x.supplierName));
+      if(!sup)x.errors.push(`Supplier "${x.supplierName}" not found in project companies`);else x.supplier=sup;
+      const dup=c.contracts.find(k=>ctNorm(k.code)===ctNorm(x.code));
+      if(dup){x.exists=true;x.existingId=dup.id;x.existingStatus=dup.status}
+    }catch(e){x.errors.push('No Cost access: '+String(e.message).slice(0,140))}
+  }
+  return cache;
+}
+app.post('/api/contracts/template',auth.ensure,async(q,r)=>{try{
+  const ExcelJS=require('exceljs'),wb=new ExcelJS.Workbook(),hubId=String(q.body.hubId||''),projects=q.body.projects||[];
+  const ws=wb.addWorksheet('Contracts');
+  ws.columns=[{header:'Project',key:'p',width:52},{header:'Contract Name',key:'n',width:34},{header:'Contract Number',key:'c',width:18},{header:'Supplier',key:'s',width:48},{header:'Description',key:'d',width:36},{header:'Issued Date',key:'i',width:14},{header:'Contract Value (ex GST)',key:'a',width:22},{header:'Apply GST',key:'g',width:11},{header:'GST %',key:'r',width:9},{header:'GST Amount',key:'ga',width:15},{header:'Total incl. GST',key:'t',width:17}];
+  const hr=ws.getRow(1);hr.font={bold:true,color:{argb:'FFFFFFFF'}};hr.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0B3D2E'}};hr.height=22;ws.views=[{state:'frozen',ySplit:1}];
+  ['J1','K1'].forEach(a=>ws.getCell(a).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5B6B63'}});
+  const pl=wb.addWorksheet('Projects'),sl=wb.addWorksheet('Suppliers'),meta=wb.addWorksheet('Meta');meta.getCell('A1').value=hubId;
+  const plist=projects.map(p=>`${String(p.name).replace(/[|,]/g,' ')} | ${ctPid(p.id)}`);plist.forEach((x,i)=>pl.getCell(`A${i+1}`).value=x);
+  const slist=[];
+  for(const p of projects){const comps=await ctCompanies(hubId,p.id);for(const c of comps)slist.push(`${String(p.name).replace(/[|,]/g,' ')} | ${c.name.replace(/,/g,' ')}`)}
+  slist.forEach((x,i)=>sl.getCell(`A${i+1}`).value=x);
+  pl.state='veryHidden';sl.state='veryHidden';meta.state='veryHidden';
+  for(let i=2;i<=501;i++){
+    if(plist.length)ws.getCell(`A${i}`).dataValidation={type:'list',allowBlank:true,showErrorMessage:true,error:'Select a project from the list',formulae:[`Projects!$A$1:$A$${plist.length}`]};
+    if(slist.length)ws.getCell(`D${i}`).dataValidation={type:'list',allowBlank:true,showErrorMessage:true,error:'Select a supplier from the list',formulae:[`Suppliers!$A$1:$A$${slist.length}`]};
+    ws.getCell(`F${i}`).numFmt='dd/mm/yyyy';ws.getCell(`F${i}`).dataValidation={type:'date',operator:'greaterThan',allowBlank:true,formulae:[new Date(2000,0,1)]};
+    ws.getCell(`G${i}`).numFmt='#,##0.00';
+    ws.getCell(`H${i}`).dataValidation={type:'list',allowBlank:true,formulae:['"Yes,No"']};
+    ws.getCell(`I${i}`).numFmt='0.00';
+    ws.getCell(`J${i}`).value={formula:`IF(H${i}="Yes",ROUND(G${i}*IF(I${i}="",10,I${i})/100,2),0)`};ws.getCell(`J${i}`).numFmt='#,##0.00';
+    ws.getCell(`K${i}`).value={formula:`IF(G${i}="","",G${i}+J${i})`};ws.getCell(`K${i}`).numFmt='#,##0.00';
+  }
+  if(plist[0]){const ex=ws.getRow(2);ex.getCell(1).value=plist[0];ex.getCell(2).value='Example Contract';ex.getCell(3).value='PO-001';const firstSup=slist.find(s=>s.startsWith(plist[0].split(' | ')[0]+' | '));if(firstSup)ex.getCell(4).value=firstSup;ex.getCell(5).value='Imported from Excel';ex.getCell(6).value=new Date();ex.getCell(7).value=10000;ex.getCell(8).value='Yes';ex.getCell(9).value=10}
+  const help=wb.addWorksheet('Instructions');help.getColumn(1).width=110;
+  ['CONTRACTS IMPORT','1. Project: pick from the dropdown.','2. Contract Number must be unique per project. Existing numbers are skipped.','3. Supplier: pick the supplier company from the dropdown (shown as Project | Supplier).','4. Issued Date: optional (dd/mm/yyyy). Sent to Autodesk as the awarded date.','5. Contract Value: amount excluding GST.','6. Apply GST: Yes adds a separate "GST" schedule-of-values line at the GST % (default 10).','7. Every created contract is set to Approved.'].forEach((t,i)=>{help.getCell(`A${i+1}`).value=t;if(!i)help.getCell('A1').font={bold:true,size:14}});
+  const b=await wb.xlsx.writeBuffer();
+  r.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');r.setHeader('Content-Disposition','attachment; filename="Forma Contracts Import.xlsx"');r.send(Buffer.from(b));
+}catch(e){r.status(500).json({error:e.message})}});
+app.post('/api/contracts/preview',auth.ensure,upload.single('file'),async(q,r)=>{try{
+  if(!q.file)throw Error('No file uploaded');const data=await ctRead(q.file.buffer);await ctCheck(q,data);const rows=data.rows;
+  r.json({total:rows.length,ready:rows.filter(x=>!x.errors.length&&!x.exists).length,existing:rows.filter(x=>x.exists&&!x.errors.length).length,invalid:rows.filter(x=>x.errors.length).length,
+    totals:{value:rows.reduce((s,x)=>s+(x.errors.length||x.exists?0:x.amount),0),gst:rows.reduce((s,x)=>s+(x.errors.length||x.exists?0:x.gst),0)},rows});
+}catch(e){r.status(500).json({error:e.message})}});
+app.post('/api/contracts/import',auth.ensure,upload.single('file'),async(q,r)=>{try{
+  if(!q.file)throw Error('No file uploaded');const data=await ctRead(q.file.buffer);const cache=await ctCheck(q,data),results=[],t=q.aps.access_token;
+  for(const x of data.rows){
+    if(x.errors.length){results.push({ok:false,row:x.row,contract:x.name,error:x.errors.join('; ')});continue}
+    if(x.exists){results.push({ok:true,skipped:true,row:x.row,contract:x.name,contractId:x.existingId,status:x.existingStatus,note:'Contract Number already exists'});continue}
+    const res={row:x.row,project:x.projectName,contract:x.name,code:x.code,supplier:x.supplier.name,warnings:[]};
+    try{
+      const base=`${CT_COST}/containers/${x.projectId}`;
+      const body={name:x.name,code:x.code};
+      if(x.description)body.description=x.description;
+      if(x.supplier.companyId)body.companyId=x.supplier.companyId;
+      if(x.supplier.companyUid)body.companyUid=x.supplier.companyUid;
+      if(x.issuedAt)body.awardedAt=x.issuedAt;
+      let c;
+      try{c=await ctAps.post(t,`${base}/contracts`,body)}
+      catch(e){if(body.awardedAt&&/awarded/i.test(e.message)){delete body.awardedAt;c=await ctAps.post(t,`${base}/contracts`,body);res.warnings.push('Issued Date not accepted by Autodesk')}else throw e}
+      res.contractId=c.id;cache[x.projectId].contracts.push(c);
+      if(x.amount>0){try{await ctAps.post(t,`${base}/schedule-of-values`,{contractId:c.id,name:x.name,code:'1',amount:x.amount});res.value=x.amount}catch(e){res.warnings.push('Contract value line failed: '+String(e.message).slice(0,160))}}
+      if(x.applyGst&&x.gst>0){try{await ctAps.post(t,`${base}/schedule-of-values`,{contractId:c.id,name:`GST ${x.gstRate}%`,code:'GST',amount:x.gst});res.gst=x.gst}catch(e){res.warnings.push('GST line failed: '+String(e.message).slice(0,160))}}
+      try{const u=await ctAps.patch(t,`${base}/contracts/${c.id}`,{status:'approved'});res.status=(u&&u.status)||'approved'}
+      catch(e){res.status=c.status||'draft';res.warnings.push('Approval failed: '+String(e.message).slice(0,160))}
+      res.ok=true;
+    }catch(e){res.ok=false;res.error=e.message}
+    results.push(res);
+  }
+  r.json({version:'v108',total:results.length,created:results.filter(x=>x.ok&&!x.skipped).length,skipped:results.filter(x=>x.skipped).length,failed:results.filter(x=>!x.ok).length,withWarnings:results.filter(x=>x.warnings&&x.warnings.length).length,results});
+}catch(e){r.status(500).json({error:e.message})}});
+// ===== end v108 Contracts module =====
+
 app.get('*',(_,r)=>r.sendFile(path.join(__dirname,'public','index.html')));if(require.main===module)app.listen(process.env.PORT||4000);module.exports=app;

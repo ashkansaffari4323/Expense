@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contracts Import | FW Expense</title>
+<link rel="stylesheet" href="contracts.css?v=108">
+</head>
+<body>
+<header class="top"><b>FW Expense</b><button id="signOut" type="button">Sign out</button></header>
+<nav class="tabs"><a class="tab" href="/">Expenses</a><a class="tab active" href="/contracts.html">Contracts</a></nav>
+
+<div class="page">
+  <aside class="card side">
+    <h2>Contract import setup</h2>
+
+    <label class="lbl">Autodesk Hub</label>
+    <select id="hub" class="input"></select>
+
+    <div class="lbl row"><span>Projects</span><span id="count" class="pill">0 selected</span></div>
+    <input id="search" class="input" placeholder="Search projects">
+    <div class="row gap">
+      <button id="selAll" class="btn sm" type="button">Select all</button>
+      <button id="selNone" class="btn sm" type="button">Clear all</button>
+    </div>
+    <div id="projects" class="projects"><div class="muted">Loading projects...</div></div>
+
+    <button id="load" class="btn" type="button">Load selected projects</button>
+    <button id="template" class="btn" type="button" disabled>Download Excel template</button>
+
+    <label class="lbl">Contracts Excel file</label>
+    <input id="file" type="file" accept=".xlsx" hidden>
+    <button id="upload" class="btn dashed" type="button">Upload Excel file</button>
+    <div id="fileName" class="muted">No file selected</div>
+
+    <div class="row gap">
+      <button id="preview" class="btn" type="button">Preview</button>
+      <button id="clear" class="btn" type="button">Clear preview</button>
+    </div>
+    <button id="create" class="btn primary" type="button" disabled>Create and approve contracts</button>
+    <div id="status" class="note">Every new contract is set to <b>Approved</b> after creation.</div>
+  </aside>
+
+  <main class="content">
+    <section id="stats" class="stats"></section>
+
+    <section class="card">
+      <div class="row"><h2>Contracts preview</h2><span id="errCount" class="pill">0 errors</span></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Row</th><th>Project</th><th>Contract</th><th>Number</th><th>Supplier</th><th>Issued</th><th class="num">Value ex GST</th><th class="num">GST</th><th class="num">Total</th><th>Status</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="10" class="muted">Load projects, download the template, upload it and select Preview.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row"><h2>API result</h2><button id="clearLog" class="btn sm" type="button">Clear</button></div>
+      <textarea id="log" readonly>No API result yet.</textarea>
+    </section>
+  </main>
+</div>
+<script src="contracts.js?v=108"></script>
+</body>
+</html>
